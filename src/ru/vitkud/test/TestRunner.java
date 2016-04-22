@@ -24,6 +24,7 @@ import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeItem;
+import org.eclipse.wb.swt.SWTResourceManager;
 import org.junit.runner.Description;
 import org.junit.runner.Request;
 import org.junit.runner.Runner;
@@ -88,7 +89,11 @@ public class TestRunner {
 		shell.setMinimumSize(new Point(300, 200));
 		shell.setSize(500, 500);
 		shell.setText("JUnit GUI - " + suiteName);
-		shell.setLayout(new FormLayout());
+		FormLayout fl_shell = new FormLayout();
+		fl_shell.marginBottom = 4;
+		fl_shell.marginRight = 4;
+		fl_shell.marginLeft = 4;
+		shell.setLayout(fl_shell);
 
 		Menu menu = new Menu(shell, SWT.BAR);
 		shell.setMenuBar(menu);
@@ -107,6 +112,7 @@ public class TestRunner {
 		mntmRestoreSavedConfiguration.setText("&Restore Saved Configuration");
 
 		MenuItem mntmExit = new MenuItem(menu_1, SWT.NONE);
+		mntmExit.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/6.png"));
 		mntmExit.setAccelerator(SWT.ALT | 'X');
 		mntmExit.setText("E&xit" + "\tAlt+X");
 		
@@ -117,26 +123,27 @@ public class TestRunner {
 		mntmTestTree.setMenu(menu_2);
 		
 		MenuItem mntmSelectAll = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
 		mntmSelectAll.setAccelerator(SWT.CTRL | SWT.ALT | 'A');
 		mntmSelectAll.setText("Select &All" + "\tCtrl+Alt+A");
 		
 		MenuItem mntmDeselectAll = new MenuItem(menu_2, SWT.NONE);
+		mntmDeselectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
 		mntmDeselectAll.setAccelerator(SWT.CTRL | SWT.DEL);
 		mntmDeselectAll.setText("&Deselect All" + "\tCtrl+Del");
 		
-		MenuItem mntm = new MenuItem(menu_2, SWT.NONE);
-		mntm.setAccelerator(SWT.CTRL | SWT.ALT | 'A');
-		mntm.setText("Select &All" + "\tCtrl+Alt+A");
-		
 		MenuItem mntmSelectFailed = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		mntmSelectFailed.setAccelerator(SWT.CTRL | 'F');
 		mntmSelectFailed.setText("Select Fai&led" + "\tCtrl+F");
 		
 		MenuItem mntmSelectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		mntmSelectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | 'A');
 		mntmSelectCurrent.setText("Select &Current" + "\tShift+Ctrl+A");
 		
 		MenuItem mntmDeselectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		mntmDeselectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | SWT.DEL);
 		mntmDeselectCurrent.setText("Deselect C&urrent" + "\tShift+Ctrl+Del");
 		
@@ -169,6 +176,7 @@ public class TestRunner {
 		new MenuItem(menu_2, SWT.SEPARATOR);
 
 		MenuItem mntmRunSelectedTest = new MenuItem(menu_2, SWT.NONE);
+		mntmRunSelectedTest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
 		mntmRunSelectedTest.setAccelerator(SWT.F8);
 		mntmRunSelectedTest.setText("Run selected test" + "\tF8");
 		
@@ -234,14 +242,17 @@ public class TestRunner {
 		mntmActions.setMenu(menu_4);
 		
 		MenuItem mntmRun = new MenuItem(menu_4, SWT.NONE);
+		mntmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
 		mntmRun.setAccelerator(SWT.F9);
 		mntmRun.setText("Run" + "\tF9");
 		
 		MenuItem mntmRunSelectedTest2 = new MenuItem(menu_4, SWT.NONE);
+		mntmRunSelectedTest2.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
 		mntmRunSelectedTest2.setAccelerator(SWT.F8);
 		mntmRunSelectedTest2.setText("Run selected test" + "\tF8");
 		
 		MenuItem mntmStop = new MenuItem(menu_4, SWT.NONE);
+		mntmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		mntmStop.setAccelerator(SWT.CTRL | SWT.F2);
 		mntmStop.setText("&Stop" + "\tCtrl+F2");
 		
@@ -250,50 +261,70 @@ public class TestRunner {
 		mntmCopyErrorMessageToClipboard.setAccelerator(SWT.SHIFT | SWT.CTRL | 'C');
 		mntmCopyErrorMessageToClipboard.setText("&Copy Error Message to Clipboard" + "\tShift+Ctrl+C");
 		
+		Label menuSeparator = new Label(shell, SWT.SEPARATOR | SWT.HORIZONTAL);
+		FormData fd_menuSeparator = new FormData();
+		fd_menuSeparator.right = new FormAttachment(100);
+		fd_menuSeparator.left = new FormAttachment(0);
+		menuSeparator.setLayoutData(fd_menuSeparator);
+		
 		toolBar = new ToolBar(shell, SWT.FLAT | SWT.RIGHT);
 		FormData fd_toolBar = new FormData();
-		fd_toolBar.bottom = new FormAttachment(0, 24);
-		fd_toolBar.right = new FormAttachment(100, -4);
-		fd_toolBar.top = new FormAttachment(0);
-		fd_toolBar.left = new FormAttachment(0, 4);
+		fd_toolBar.top = new FormAttachment(menuSeparator);
+		fd_toolBar.right = new FormAttachment(100);
+		fd_toolBar.left = new FormAttachment(0);
 		toolBar.setLayoutData(fd_toolBar);
 		
-		SashForm sashForm = new SashForm(shell, SWT.VERTICAL);
-		FormData fd_sashForm = new FormData();
-		fd_sashForm.top = new FormAttachment(toolBar, 4);
-		
 		ToolItem tltmSelectall = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectall.setText("Select &All");
+		tltmSelectall.setToolTipText("Select all tests");
+		tltmSelectall.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
 		
 		ToolItem tltmDeselectall = new ToolItem(toolBar, SWT.NONE);
-		tltmDeselectall.setText("&Deselect All");
+		tltmDeselectall.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
+		tltmDeselectall.setToolTipText("Deselect all tests");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		ToolItem tltmSelectfailed = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectfailed.setText("Select Fai&led");
+		tltmSelectfailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
+		tltmSelectfailed.setToolTipText("Select all failed tests");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		ToolItem tltmSelectcurrent = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectcurrent.setText("Select &Current");
+		tltmSelectcurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
+		tltmSelectcurrent.setToolTipText("Select current test");
 		
 		ToolItem tltmDeselectcurrent = new ToolItem(toolBar, SWT.NONE);
-		tltmDeselectcurrent.setText("Deselect C&urrent");
+		tltmDeselectcurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
+		tltmDeselectcurrent.setToolTipText("Deselect current test");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		ToolItem tltmRun = new ToolItem(toolBar, SWT.NONE);
-		tltmRun.setText("&Run");
+		tltmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
+		tltmRun.setToolTipText("Run selected tests");
 		
 		ToolItem tltmRunselectedtest = new ToolItem(toolBar, SWT.NONE);
-		tltmRunselectedtest.setText("Run selected test");
+		tltmRunselectedtest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
+		tltmRunselectedtest.setToolTipText("Run current test");
 		
 		ToolItem tltmStop = new ToolItem(toolBar, SWT.NONE);
-		tltmStop.setText("&Stop");
-		fd_sashForm.right = new FormAttachment(100, -4);
-		fd_sashForm.bottom = new FormAttachment(100, -4);
-		fd_sashForm.left = new FormAttachment(0, 4);
+		tltmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
+		tltmStop.setToolTipText("Stop");
+
+		Label toolBarSeparator = new Label(shell, SWT.SEPARATOR | SWT.HORIZONTAL);
+		FormData fd_toolBarSeparator = new FormData();
+		fd_toolBarSeparator.top = new FormAttachment(toolBar);
+		fd_toolBarSeparator.right = new FormAttachment(100);
+		fd_toolBarSeparator.left = new FormAttachment(0);
+		toolBarSeparator.setLayoutData(fd_toolBarSeparator);
+
+		SashForm sashForm = new SashForm(shell, SWT.VERTICAL);
+		FormData fd_sashForm = new FormData();
+		fd_sashForm.top = new FormAttachment(toolBarSeparator, 4);
+		fd_sashForm.right = new FormAttachment(100);
+		fd_sashForm.bottom = new FormAttachment(100);
+		fd_sashForm.left = new FormAttachment(0);
 		sashForm.setLayoutData(fd_sashForm);
 		
 		Composite compositeTree = new Composite(sashForm, SWT.NONE);
@@ -309,7 +340,7 @@ public class TestRunner {
 		
 		testTree = new Tree(compositeTree, SWT.BORDER | SWT.CHECK);
 		FormData fd_testTree = new FormData();
-		fd_testTree.top = new FormAttachment(lblTestHierarchy, 6);
+		fd_testTree.top = new FormAttachment(lblTestHierarchy, 4);
 		fd_testTree.left = new FormAttachment(0);
 		fd_testTree.bottom = new FormAttachment(100, -3);
 		fd_testTree.right = new FormAttachment(100);
@@ -321,7 +352,7 @@ public class TestRunner {
 		Composite compositeProgressAndScore = new Composite(compositeResults, SWT.BORDER);
 		compositeProgressAndScore.setLayout(new FormLayout());
 		FormData fd_compositeProgressAndScore = new FormData();
-		fd_compositeProgressAndScore.bottom = new FormAttachment(0, 56);
+		fd_compositeProgressAndScore.bottom = new FormAttachment(0, 52);
 		fd_compositeProgressAndScore.right = new FormAttachment(100);
 		fd_compositeProgressAndScore.top = new FormAttachment(0, 3);
 		fd_compositeProgressAndScore.left = new FormAttachment(0);
@@ -446,7 +477,7 @@ public class TestRunner {
 		fd_styledText.left = new FormAttachment(0);
 		styledText.setLayoutData(fd_styledText);
 		sashForm.setWeights(new int[] {200, 150, 50});
-
+		
 	}
 
 	private void fillTestSuite() {

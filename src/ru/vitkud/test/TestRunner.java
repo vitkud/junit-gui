@@ -1,7 +1,6 @@
 package ru.vitkud.test;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.ArrayList;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
@@ -33,12 +32,24 @@ public class TestRunner {
 
 	private String suiteName;
 	private Class<?> testClass;
+
+	private Request request;
+	private Runner runner;
+	private Description rootDescription;
+
+	private ArrayList<Description> fTests;
+	//private Timer fUpdateTimer;
+	//private boolean fTimerExpired;
 	
 	protected Shell shell;
 	private ToolBar toolBar;
 	private Table tableResults;
 	private Table tableFailureList;
 	private Tree testTree;
+	private MenuItem mntmFailTestCaseIfMemoryLeaked;
+	private MenuItem mntmReportMemoryLeakTypeOnShutdown;
+	private MenuItem mntmIgnoreMemoryLeakInSetUpTearDown;
+	private MenuItem mntmHideTestNodesOnOpen;
 
 	/**
 	 * Launch the application.
@@ -60,7 +71,7 @@ public class TestRunner {
 
 	public TestRunner(String suiteName) throws ClassNotFoundException {
 		this.suiteName = suiteName;
-		testClass = Class.forName(suiteName);
+		this.testClass = Class.forName(suiteName);
 	}
 
 	/**
@@ -70,7 +81,9 @@ public class TestRunner {
 		Display display = Display.getDefault();
 		createContents();
 
-		fillTestSuite();
+		formCreate();
+		setSuite();
+		formShow();
 
 		shell.open();
 		shell.layout();
@@ -79,6 +92,108 @@ public class TestRunner {
 				display.sleep();
 			}
 		}
+	}
+
+	private void setSuite() {
+		if (testClass != null) {
+			request = Request.aClass(testClass);
+			runner = request.getRunner();
+			rootDescription = runner.getDescription();
+
+			loadSuiteConfiguration();
+			enableUI(true);
+			initTree();
+		} else {
+			enableUI(false);
+		}
+		
+	}
+
+	private void initTree() {
+		fillTestTree();
+		setup();
+		if (mntmHideTestNodesOnOpen.getSelection()) {
+			// TODO HideTestNodesAction.Execute
+		} else {
+			// TODO ExpandAllNodesAction.Execute;
+		}
+		//TODO TestTree.Selected := TestTree.Items.GetFirstNode;
+	}
+
+	private void fillTestTree() {
+		testTree.removeAll();
+		fTests.clear();
+		fillTestTree(new TreeItem(testTree, SWT.NONE), rootDescription);
+	}
+
+	private void fillTestTree(TreeItem treeItem, Description description) {
+		if (description == null)
+			return;
+
+		treeItem.setText(description.getDisplayName());
+		treeItem.setData(fTests.size());
+		fTests.add(description);
+
+		for (Description childDescripton: description.getChildren()) {
+			fillTestTree(new TreeItem(treeItem, SWT.NONE), childDescripton);
+		}
+	}
+
+	private void loadSuiteConfiguration() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void formCreate() {
+//		fillTestSuite();
+		fTests = new ArrayList<>();
+		loadConfiguration();
+
+		// TODO setupCustomShortcuts;
+		testTree.removeAll(); // XXX
+		enableUI(false);
+		clearFailureMessage();
+		setup();
+
+		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
+		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
+		mntmReportMemoryLeakTypeOnShutdown.setEnabled(false);
+		
+		// TODO if not FailTestCaseIfMemoryLeakedAction.Enabled then
+		// TODO   FailTestCaseIfMemoryLeakedAction.Checked := False;
+		// TODO IgnoreMemoryLeakInSetUpTearDownAction.Enabled :=
+		// TODO   FailTestCaseIfMemoryLeakedAction.Checked;
+		// TODO if not IgnoreMemoryLeakInSetUpTearDownAction.Enabled then
+		// TODO   IgnoreMemoryLeakInSetUpTearDownAction.Checked := False;
+	}
+
+	private void formShow() {
+		setupGuiNodes();
+	}
+
+	private void setupGuiNodes() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void setup() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void clearFailureMessage() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void enableUI(boolean enable) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void loadConfiguration() {
+		// TODO Auto-generated method stub
+		
 	}
 
 	/**
@@ -198,7 +313,7 @@ public class TestRunner {
 		mntmAutoChangeFocus.setSelection(true);
 		mntmAutoChangeFocus.setText("Auto Change &Focus");
 		
-		MenuItem mntmHideTestNodesOnOpen = new MenuItem(menu_3, SWT.CHECK);
+		mntmHideTestNodesOnOpen = new MenuItem(menu_3, SWT.CHECK);
 		mntmHideTestNodesOnOpen.setText("&Hide Test Nodes On Open");
 		
 		MenuItem mntmShowTestedNode = new MenuItem(menu_3, SWT.CHECK);
@@ -226,13 +341,13 @@ public class TestRunner {
 		
 		new MenuItem(menu_3, SWT.SEPARATOR);
 
-		MenuItem mntmReportMemoryLeakTypeOnShutdown = new MenuItem(menu_3, SWT.CHECK);
+		mntmReportMemoryLeakTypeOnShutdown = new MenuItem(menu_3, SWT.CHECK);
 		mntmReportMemoryLeakTypeOnShutdown.setText("Report memory leak type on Shutdown");
 		
-		MenuItem mntmFailTestCaseIfMemoryLeaked = new MenuItem(menu_3, SWT.CHECK);
+		mntmFailTestCaseIfMemoryLeaked = new MenuItem(menu_3, SWT.CHECK);
 		mntmFailTestCaseIfMemoryLeaked.setText("Fail TestCase if memory leaked");
 		
-		MenuItem mntmIgnoreMemoryLeakInSetUpTearDown = new MenuItem(menu_3, SWT.CHECK);
+		mntmIgnoreMemoryLeakInSetUpTearDown = new MenuItem(menu_3, SWT.CHECK);
 		mntmIgnoreMemoryLeakInSetUpTearDown.setText("Ignore memory leak in SetUp/TearDown");
 		
 		MenuItem mntmActions = new MenuItem(menu, SWT.CASCADE);
@@ -345,6 +460,27 @@ public class TestRunner {
 		fd_testTree.bottom = new FormAttachment(100, -3);
 		fd_testTree.right = new FormAttachment(100);
 		testTree.setLayoutData(fd_testTree);
+		
+		TreeItem trtmTest = new TreeItem(testTree, SWT.NONE);
+		trtmTest.setChecked(true);
+		trtmTest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
+		trtmTest.setText("Test1");
+		
+		TreeItem trtmSubtest = new TreeItem(trtmTest, SWT.NONE);
+		trtmSubtest.setChecked(true);
+		trtmSubtest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
+		trtmSubtest.setText("SubTest");
+		
+		TreeItem trtmSubtest_1 = new TreeItem(trtmTest, SWT.NONE);
+		trtmSubtest_1.setChecked(true);
+		trtmSubtest_1.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
+		trtmSubtest_1.setText("SubTest1.2");
+		trtmTest.setExpanded(true);
+		
+		TreeItem trtmTest_1 = new TreeItem(testTree, SWT.NONE);
+		trtmTest_1.setChecked(true);
+		trtmTest_1.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
+		trtmTest_1.setText("Test2");
 		
 		Composite compositeResults = new Composite(sashForm, SWT.NONE);
 		compositeResults.setLayout(new FormLayout());
@@ -470,6 +606,7 @@ public class TestRunner {
 		compositeErrorBox.setLayout(new FormLayout());
 		
 		StyledText styledText = new StyledText(compositeErrorBox, SWT.BORDER);
+		styledText.setText("ErrorMessageRTF");
 		FormData fd_styledText = new FormData();
 		fd_styledText.bottom = new FormAttachment(100);
 		fd_styledText.right = new FormAttachment(100);
@@ -477,31 +614,30 @@ public class TestRunner {
 		fd_styledText.left = new FormAttachment(0);
 		styledText.setLayoutData(fd_styledText);
 		sashForm.setWeights(new int[] {200, 150, 50});
-		
+
 	}
 
-	private void fillTestSuite() {
-
-		Request request = Request.aClass(testClass);
-		Runner runner = request.getRunner();
-		Description rootDescription = runner.getDescription();
-		TreeItem rootItem = new TreeItem(testTree, 0);
-		rootItem.setText(rootDescription.getDisplayName());
-		rootItem.setData(rootDescription);
-		Deque<TreeItem> stack = new ArrayDeque<>();
-		stack.push(rootItem);
-		while (stack.size() > 0) {
-			TreeItem curItem = stack.pop();
-			Description curDescription = (Description) curItem.getData();
-			if (curDescription.isSuite()) {
-				//TestSuite testSuite = (TestSuite) curTest;
-				for (Description childDescripton: curDescription.getChildren()) {
-					TreeItem item = new TreeItem(curItem, 0);
-					item.setText(childDescripton.toString());
-					item.setData(childDescripton);
-					stack.push(item);
-				}
-			}
-		}
-	}
+//	private void fillTestSuite() {
+//		Request request = Request.aClass(testClass);
+//		Runner runner = request.getRunner();
+//		Description rootDescription = runner.getDescription();
+//		TreeItem rootItem = new TreeItem(testTree, 0);
+//		rootItem.setText(rootDescription.getDisplayName());
+//		rootItem.setData(rootDescription);
+//		Deque<TreeItem> stack = new ArrayDeque<>();
+//		stack.push(rootItem);
+//		while (stack.size() > 0) {
+//			TreeItem curItem = stack.pop();
+//			Description curDescription = (Description) curItem.getData();
+//			if (curDescription.isSuite()) {
+//				//TestSuite testSuite = (TestSuite) curTest;
+//				for (Description childDescripton: curDescription.getChildren()) {
+//					TreeItem item = new TreeItem(curItem, 0);
+//					item.setText(childDescripton.toString());
+//					item.setData(childDescripton);
+//					stack.push(item);
+//				}
+//			}
+//		}
+//	}
 }

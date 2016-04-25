@@ -26,20 +26,28 @@ import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.wb.swt.SWTResourceManager;
 import org.junit.runner.Description;
 import org.junit.runner.Request;
+import org.junit.runner.Result;
 import org.junit.runner.Runner;
+import org.junit.runner.notification.RunListener;
+import org.junit.runner.notification.RunNotifier;
+import org.junit.runner.notification.StoppedByUserException;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 
-public class TestRunner {
+public class TestRunner extends RunListener {
 
 	private String suiteName;
-	private Class<?> testClass;
+	private Class<?> suite;
 
 	private Request request;
 	private Runner runner;
 	private Description rootDescription;
 
 	private ArrayList<Description> fTests;
+	private boolean fRunning;
 	//private Timer fUpdateTimer;
 	//private boolean fTimerExpired;
+	private int fFailureCount;
 	
 	protected Shell shell;
 	private ToolBar toolBar;
@@ -63,6 +71,7 @@ public class TestRunner {
 			}
 			TestRunner window = new TestRunner(args[0]);
 			window.open();
+			System.exit(window.getfFailureCount());
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.exit(1);
@@ -71,7 +80,7 @@ public class TestRunner {
 
 	public TestRunner(String suiteName) throws ClassNotFoundException {
 		this.suiteName = suiteName;
-		this.testClass = Class.forName(suiteName);
+		this.suite = Class.forName(suiteName);
 	}
 
 	/**
@@ -95,8 +104,8 @@ public class TestRunner {
 	}
 
 	private void setSuite() {
-		if (testClass != null) {
-			request = Request.aClass(testClass);
+		if (suite != null) {
+			request = Request.aClass(suite);
 			runner = request.getRunner();
 			rootDescription = runner.getDescription();
 
@@ -357,6 +366,12 @@ public class TestRunner {
 		mntmActions.setMenu(menu_4);
 		
 		MenuItem mntmRun = new MenuItem(menu_4, SWT.NONE);
+		mntmRun.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				run();
+			}
+		});
 		mntmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
 		mntmRun.setAccelerator(SWT.F9);
 		mntmRun.setText("Run" + "\tF9");
@@ -416,6 +431,12 @@ public class TestRunner {
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		ToolItem tltmRun = new ToolItem(toolBar, SWT.NONE);
+		tltmRun.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				run();
+			}
+		});
 		tltmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
 		tltmRun.setToolTipText("Run selected tests");
 		
@@ -617,6 +638,63 @@ public class TestRunner {
 
 	}
 
+	protected void run() {
+		if (suite == null)
+			return;
+
+		setup();
+		runTheTest();
+	}
+
+	private void runTheTest() {
+		if (suite == null)
+			return;
+
+		if (fRunning) {
+			// warning: we're reentering this method if fRunning is true
+			// TODO assert(fTestResult != null);
+			// TODO fTestResult.stop();
+			return;
+		}
+
+		fRunning = true;
+		try {
+			// TODO RunAction.Enabled  := False;
+			// TODO StopAction.Enabled := True;
+
+			// TODO CopyMessageToClipboardAction.Enabled := false;
+
+			enableUI(false);
+			// TODO autoSaveConfiguration();
+			// TODO clearResult();
+
+			final RunNotifier notifier = new RunNotifier();
+			notifier.addListener(this);
+			Result result = new Result();
+			RunListener listener = result.createListener();
+			notifier.addListener(listener);
+			try {
+				// TODO TestResult.BreakOnFailures := BreakOnFailuresAction.Checked;
+				// TODO TestResult.FailsIfNoChecksExecuted := FailIfNoChecksExecutedAction.Checked;
+				// TODO TestResult.FailsIfMemoryLeaked := FailTestCaseIfMemoryLeakedAction.Checked;
+				// TODO TestResult.IgnoresMemoryLeakInSetUpTearDown := IgnoreMemoryLeakInSetUpTearDownAction.Checked;
+				notifier.fireTestRunStarted(rootDescription);
+				runner.run(notifier);
+				notifier.fireTestRunFinished(result);
+			} catch (StoppedByUserException e) {
+				// not interesting
+			} finally {
+				// TODO ? FErrorCount := TestResult.ErrorCount;
+				fFailureCount = result.getFailureCount();
+				// TODO ? TestResult.Free;
+				// TODO ?TestResult := nil;
+			}
+		} finally {
+			fRunning = false;
+			enableUI(true);
+		}
+	}
+
 //	private void fillTestSuite() {
 //		Request request = Request.aClass(testClass);
 //		Runner runner = request.getRunner();
@@ -640,4 +718,9 @@ public class TestRunner {
 //			}
 //		}
 //	}
+
+	public int getfFailureCount() {
+		return fFailureCount;
+	}
+
 }

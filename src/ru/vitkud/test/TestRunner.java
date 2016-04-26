@@ -1,10 +1,15 @@
 package ru.vitkud.test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
@@ -28,26 +33,24 @@ import org.junit.runner.Description;
 import org.junit.runner.Request;
 import org.junit.runner.Result;
 import org.junit.runner.Runner;
+import org.junit.runner.manipulation.Filter;
+import org.junit.runner.notification.Failure;
 import org.junit.runner.notification.RunListener;
 import org.junit.runner.notification.RunNotifier;
 import org.junit.runner.notification.StoppedByUserException;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
 
 public class TestRunner extends RunListener {
 
 	private String suiteName;
 	private Class<?> suite;
 
-	private Request request;
-	private Runner runner;
-	private Description rootDescription;
-
 	private ArrayList<Description> fTests;
+	private Map<Description, TreeItem> testToNodeMap;
 	private boolean fRunning;
 	//private Timer fUpdateTimer;
 	//private boolean fTimerExpired;
 	private int fFailureCount;
+	private List<Description> fSelectedTests;
 	
 	protected Shell shell;
 	private ToolBar toolBar;
@@ -105,10 +108,6 @@ public class TestRunner extends RunListener {
 
 	private void setSuite() {
 		if (suite != null) {
-			request = Request.aClass(suite);
-			runner = request.getRunner();
-			rootDescription = runner.getDescription();
-
 			loadSuiteConfiguration();
 			enableUI(true);
 			initTree();
@@ -132,7 +131,15 @@ public class TestRunner extends RunListener {
 	private void fillTestTree() {
 		testTree.removeAll();
 		fTests.clear();
-		fillTestTree(new TreeItem(testTree, SWT.NONE), rootDescription);
+		testToNodeMap.clear();
+
+		Request request = Request.aClass(suite);
+		Runner runner = request.getRunner();
+		Description rootDescription = runner.getDescription();
+
+		TreeItem rootItem = new TreeItem(testTree, SWT.NONE);
+
+		fillTestTree(rootItem, rootDescription);
 	}
 
 	private void fillTestTree(TreeItem treeItem, Description description) {
@@ -141,7 +148,11 @@ public class TestRunner extends RunListener {
 
 		treeItem.setText(description.getDisplayName());
 		treeItem.setData(fTests.size());
+		treeItem.setChecked(true); // TODO ...
+		treeItem.setImage(SWTResourceManager.getImage(TestRunner.class, "images/run/0.png"));
+
 		fTests.add(description);
+		testToNodeMap.put(description, treeItem);
 
 		for (Description childDescripton: description.getChildren()) {
 			fillTestTree(new TreeItem(treeItem, SWT.NONE), childDescripton);
@@ -156,6 +167,7 @@ public class TestRunner extends RunListener {
 	private void formCreate() {
 //		fillTestSuite();
 		fTests = new ArrayList<>();
+		testToNodeMap = new HashMap<>();
 		loadConfiguration();
 
 		// TODO setupCustomShortcuts;
@@ -659,6 +671,10 @@ public class TestRunner extends RunListener {
 
 		fRunning = true;
 		try {
+
+			Request request = Request.aClass(suite).filterWith(new RunTheTestFilter());
+			Runner runner = request.getRunner();
+
 			// TODO RunAction.Enabled  := False;
 			// TODO StopAction.Enabled := True;
 
@@ -678,13 +694,14 @@ public class TestRunner extends RunListener {
 				// TODO TestResult.FailsIfNoChecksExecuted := FailIfNoChecksExecutedAction.Checked;
 				// TODO TestResult.FailsIfMemoryLeaked := FailTestCaseIfMemoryLeakedAction.Checked;
 				// TODO TestResult.IgnoresMemoryLeakInSetUpTearDown := IgnoreMemoryLeakInSetUpTearDownAction.Checked;
-				notifier.fireTestRunStarted(rootDescription);
+				notifier.fireTestRunStarted(runner.getDescription());
 				runner.run(notifier);
 				notifier.fireTestRunFinished(result);
 			} catch (StoppedByUserException e) {
 				// not interesting
 			} finally {
 				// TODO ? FErrorCount := TestResult.ErrorCount;
+				//fIgnoreCount = result.getIgnoreCount();
 				fFailureCount = result.getFailureCount();
 				// TODO ? TestResult.Free;
 				// TODO ?TestResult := nil;
@@ -695,6 +712,28 @@ public class TestRunner extends RunListener {
 		}
 	}
 
+	private TreeItem testToNode(Description test) {
+		return testToNodeMap.get(test);
+	}
+
+	public class RunTheTestFilter extends Filter {
+
+		@Override
+		public boolean shouldRun(Description description) {
+			if (fSelectedTests == null) {
+				TreeItem node = testToNode(description);
+				return node != null && node.getChecked();
+			} else {
+				return fSelectedTests.contains(description);
+			}
+		}
+
+		@Override
+		public String describe() {
+			return "RunTheTestFilter";
+		}
+	}
+	
 //	private void fillTestSuite() {
 //		Request request = Request.aClass(testClass);
 //		Runner runner = request.getRunner();
@@ -722,5 +761,35 @@ public class TestRunner extends RunListener {
 	public int getfFailureCount() {
 		return fFailureCount;
 	}
+
+	// implements RunListener
+
+	@Override
+    public void testRunStarted(Description description) throws Exception {
+    }
+
+    @Override
+    public void testRunFinished(Result result) throws Exception {
+    }
+
+    @Override
+    public void testStarted(Description description) throws Exception {
+    }
+
+	@Override
+    public void testFinished(Description description) throws Exception {
+    }
+
+    @Override
+    public void testFailure(Failure failure) throws Exception {
+    }
+
+    @Override
+    public void testAssumptionFailure(Failure failure) {
+    }
+
+    @Override
+    public void testIgnored(Description description) throws Exception {
+    }
 
 }

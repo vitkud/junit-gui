@@ -4,6 +4,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
@@ -12,7 +13,6 @@ import org.junit.runners.Suite;
 	First.class,
 	Second.class,
 	Third.class})
-
 public class AllTests {
 
 	@BeforeClass
@@ -33,6 +33,11 @@ public class AllTests {
 	@After
 	public void tearDown() throws Exception {
 		System.out.println("AllTests.tearDown()");
+	}
+
+	@Test
+	public void suiteTest() {
+		System.out.println("AllTests.suiteTest()");
 	}
 
 }

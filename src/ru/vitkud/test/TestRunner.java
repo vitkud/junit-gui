@@ -10,6 +10,8 @@ import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
@@ -41,17 +43,39 @@ import org.junit.runner.notification.StoppedByUserException;
 
 public class TestRunner extends RunListener {
 
+	// Color constants for the progress bar and failure details panel
+	private Color CL_OK;// = Display.getCurrent().getSystemColor(SWT.COLOR_GREEN);
+	private Color CL_FAILURE;// = Display.getCurrent().getSystemColor(SWT.COLOR_MAGENTA);
+	private Color CL_ERROR;// = Display.getCurrent().getSystemColor(SWT.COLOR_RED);
+
+	// color images used in the test tree and failure list
+	@SuppressWarnings("unused") // TODO ...
+	private Image imgNone;
+	private Image imgRunning;
+	private Image imgRun;
+	@SuppressWarnings("unused") // TODO ...
+	private Image imgHasProps;
+	private Image imgFailed;
+	private Image imgError;
+
 	private String suiteName;
 	private Class<?> suite;
 
 	private ArrayList<Description> fTests;
 	private Map<Description, TreeItem> testToNodeMap;
 	private boolean fRunning;
+	private Result result;
 	//private Timer fUpdateTimer;
 	//private boolean fTimerExpired;
 	private int fFailureCount;
 	private List<Description> fSelectedTests;
-	
+
+	@SuppressWarnings("unused") // TODO ...
+	private long fTotalTime;
+
+//	private static Image[] actionsImages;
+
+	protected Display display;
 	protected Shell shell;
 	private ToolBar toolBar;
 	private Table tableResults;
@@ -61,6 +85,8 @@ public class TestRunner extends RunListener {
 	private MenuItem mntmReportMemoryLeakTypeOnShutdown;
 	private MenuItem mntmIgnoreMemoryLeakInSetUpTearDown;
 	private MenuItem mntmHideTestNodesOnOpen;
+	private ProgressBar scoreBar;
+	private MenuItem mntmShowTestedNode;
 
 	/**
 	 * Launch the application.
@@ -84,15 +110,28 @@ public class TestRunner extends RunListener {
 	public TestRunner(String suiteName) throws ClassNotFoundException {
 		this.suiteName = suiteName;
 		this.suite = Class.forName(suiteName);
+
+//		loadImages();
 	}
+
+//	private void loadImages() {
+//	{
+//		actionsImages = new Image[11];
+//		for (int i = 0; i < actionsImages.length; ++i) {
+//			actionsImages[i] = new Image(Display.getDefault(), getClass().getResourceAsStream("images/actions/" + i + ".png"));
+//		}
+//	}
 
 	/**
 	 * Open the window.
 	 */
 	public void open() {
-		Display display = Display.getDefault();
+		display = Display.getDefault();
 		createContents();
 
+		initColors();
+		loadImages();
+		
 		formCreate();
 		setSuite();
 		formShow();
@@ -104,6 +143,21 @@ public class TestRunner extends RunListener {
 				display.sleep();
 			}
 		}
+	}
+
+	private void loadImages() {
+		imgNone = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png");
+		imgRunning = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/1.png");
+		imgRun = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/2.png");
+		imgHasProps = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/3.png");
+		imgFailed = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/4.png");
+		imgError = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/5.png");
+	}
+
+	private void initColors() {
+		CL_OK = display.getSystemColor(SWT.COLOR_GREEN);
+		CL_FAILURE = display.getSystemColor(SWT.COLOR_MAGENTA);
+		CL_ERROR = display.getSystemColor(SWT.COLOR_RED);
 	}
 
 	private void setSuite() {
@@ -337,7 +391,7 @@ public class TestRunner extends RunListener {
 		mntmHideTestNodesOnOpen = new MenuItem(menu_3, SWT.CHECK);
 		mntmHideTestNodesOnOpen.setText("&Hide Test Nodes On Open");
 		
-		MenuItem mntmShowTestedNode = new MenuItem(menu_3, SWT.CHECK);
+		mntmShowTestedNode = new MenuItem(menu_3, SWT.CHECK);
 		mntmShowTestedNode.setSelection(true);
 		mntmShowTestedNode.setText("&Show Tested Node");
 		
@@ -487,6 +541,7 @@ public class TestRunner extends RunListener {
 		lblTestHierarchy.setText("Test Hi&erarchy:");
 		
 		testTree = new Tree(compositeTree, SWT.BORDER | SWT.CHECK);
+		testTree.setToolTipText("Hierarchy of test cases. Checked test cases will be run.");
 		FormData fd_testTree = new FormData();
 		fd_testTree.top = new FormAttachment(lblTestHierarchy, 4);
 		fd_testTree.left = new FormAttachment(0);
@@ -519,6 +574,7 @@ public class TestRunner extends RunListener {
 		compositeResults.setLayout(new FormLayout());
 		
 		Composite compositeProgressAndScore = new Composite(compositeResults, SWT.BORDER);
+		compositeProgressAndScore.setToolTipText("");
 		compositeProgressAndScore.setLayout(new FormLayout());
 		FormData fd_compositeProgressAndScore = new FormData();
 		fd_compositeProgressAndScore.bottom = new FormAttachment(0, 52);
@@ -536,6 +592,7 @@ public class TestRunner extends RunListener {
 		lblProgress.setText("Progress:");
 		
 		ProgressBar progressBar = new ProgressBar(compositeProgressAndScore, SWT.NONE);
+		progressBar.setToolTipText("Shows the proportion of tests run");
 		FormData fd_progressBar = new FormData();
 		fd_progressBar.height = 12;
 		fd_progressBar.top = new FormAttachment(0, 6);
@@ -551,7 +608,8 @@ public class TestRunner extends RunListener {
 		lblScore.setLayoutData(fd_lblScore);
 		lblScore.setText("Score:");
 		
-		ProgressBar scoreBar = new ProgressBar(compositeProgressAndScore, SWT.NONE);
+		scoreBar = new ProgressBar(compositeProgressAndScore, SWT.BORDER);
+		scoreBar.setToolTipText("Shows the proportion of successful tests");
 		FormData fd_scoreBar = new FormData();
 		fd_scoreBar.right = new FormAttachment(100, -56);
 		fd_scoreBar.height = 12;
@@ -568,6 +626,7 @@ public class TestRunner extends RunListener {
 		lblProgressPercent.setText("Progress");
 		
 		tableResults = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
+		tableResults.setToolTipText("Shows statistics about the current/last run");
 		FormData fd_tableResults = new FormData();
 		fd_tableResults.height = 16;
 		fd_tableResults.top = new FormAttachment(compositeProgressAndScore, 3);
@@ -577,6 +636,7 @@ public class TestRunner extends RunListener {
 		tableResults.setHeaderVisible(true);
 		
 		tableFailureList = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
+		tableFailureList.setToolTipText("Shows the list of failed tests");
 		FormData fd_tableFailureList = new FormData();
 		fd_tableFailureList.bottom = new FormAttachment(100, -3);
 		fd_tableFailureList.left = new FormAttachment(0, 0);
@@ -685,8 +745,8 @@ public class TestRunner extends RunListener {
 			// TODO clearResult();
 
 			final RunNotifier notifier = new RunNotifier();
-			notifier.addListener(this);
-			Result result = new Result();
+			notifier.addListener(new RunTheTestListener());
+			result = new Result();
 			RunListener listener = result.createListener();
 			notifier.addListener(listener);
 			try {
@@ -730,10 +790,182 @@ public class TestRunner extends RunListener {
 
 		@Override
 		public String describe() {
-			return "RunTheTestFilter";
+			return getClass().getSimpleName();
 		}
+
 	}
-	
+
+	private class RunTheTestListener extends RunListener {
+
+		boolean lastTestFail;
+
+		// This may be called on an arbitrary thread.
+		@Override
+		public void testRunStarted(final Description description) throws Exception {
+	    	if (display.isDisposed()) return;
+	    	display.syncExec(new Runnable() {
+				@Override public void run() {
+			    	if (display.isDisposed()) return;
+					testingStarts(description);
+				}
+			});
+		}
+
+		// This may be called on an arbitrary thread.
+		@Override
+		public void testRunFinished(final Result result) throws Exception {
+	    	if (!display.isDisposed()) {
+	    		display.syncExec(new Runnable() {
+	    			@Override public void run() {
+	    				if (!display.isDisposed())
+	    					testingEnds(result);
+	    			}
+	    		});
+	    	}
+		}
+
+		public void testStarted(final Description description) throws Exception {
+			lastTestFail = false;
+	    	if (!display.isDisposed()) {
+	    		display.syncExec(new Runnable() {
+	    			@Override public void run() {
+	    				if (!display.isDisposed())
+	    					startTest(description);
+	    			}
+	    		});
+	    	}
+		}
+
+		public void testFinished(final Description description) throws Exception {
+	    	if (!display.isDisposed()) {
+	    		display.syncExec(new Runnable() {
+	    			@Override public void run() {
+	    				if (!display.isDisposed()) {
+	    					if (!lastTestFail)
+	    						addSuccess(description);
+	    					endTest(description);
+	    				}
+	    			}
+	    		});
+	    	}
+		}
+
+		//  may be called on an arbitrary thread.
+		public void testFailure(final Failure failure) throws Exception {
+			lastTestFail = true;
+			if (!display.isDisposed()) {
+				display.syncExec(new Runnable() {
+					@Override public void run() {
+						if (!display.isDisposed()) {
+							if (failure.getException() instanceof AssertionError)
+								addFailure(failure);
+							else 
+								addError(failure);
+						}
+					}
+				});
+			}
+		}
+
+		public void testAssumptionFailure(final Failure failure) {
+			lastTestFail = true;
+			if (!display.isDisposed()) {
+				display.syncExec(new Runnable() {
+					@Override public void run() {
+						if (!display.isDisposed()) {
+							addFailure(failure); // TODO ...
+						}
+					}
+				});
+			}
+		}
+
+		public void testIgnored(Description description) throws Exception {
+			// TODO ..
+		}
+
+	}
+
+	protected void testingStarts(Description description) {
+    	fTotalTime = 0;
+    	updateStatus(true);
+    	scoreBar.setBackground(CL_OK);
+    	scoreBar.update();
+	}
+
+	protected void testingEnds(Result result) {
+		fTotalTime = result.getRunTime();
+	}
+
+	protected void startTest(Description description) {
+    	assert result != null;
+    	assert description != null;
+    	TreeItem node = testToNode(description);
+    	assert node != null;
+    	setTreeNodeImage(node, imgRunning);
+		if (mntmShowTestedNode.getSelection()) {
+			makeNodeVisible(node);
+			testTree.update();
+		}
+		clearStatusMessage();
+		updateStatus(false);
+	}
+
+	protected void endTest(Description description) {
+		updateStatus(false);
+	}
+
+	protected void addSuccess(Description description) {
+		assert description != null;
+		setTreeNodeImage(testToNode(description), imgRun);
+	}
+
+	protected void addError(Failure failure) {
+		TableItem item = addFailureItem(failure);
+		item.setImage(imgError);
+		scoreBar.setBackground(CL_ERROR);
+		scoreBar.update();
+
+		setTreeNodeImage(testToNode(failure.getDescription()), imgError);
+		updateStatus(false);
+	}
+
+	protected void addFailure(Failure failure) {
+		TableItem item = addFailureItem(failure);
+		item.setImage(imgFailed);
+		if (!CL_ERROR.equals(scoreBar.getBackground())) {
+			scoreBar.setBackground(CL_FAILURE);
+			scoreBar.update();
+		}
+		setTreeNodeImage(testToNode(failure.getDescription()), imgFailed);
+		updateStatus(false);
+	}
+
+	private TableItem addFailureItem(Failure failure) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	private void updateStatus(boolean b) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void setTreeNodeImage(TreeItem node, Image imgRunning2) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void makeNodeVisible(TreeItem node) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void clearStatusMessage() {
+		// TODO Auto-generated method stub
+		
+	}
+
 //	private void fillTestSuite() {
 //		Request request = Request.aClass(testClass);
 //		Runner runner = request.getRunner();
@@ -761,35 +993,5 @@ public class TestRunner extends RunListener {
 	public int getfFailureCount() {
 		return fFailureCount;
 	}
-
-	// implements RunListener
-
-	@Override
-    public void testRunStarted(Description description) throws Exception {
-    }
-
-    @Override
-    public void testRunFinished(Result result) throws Exception {
-    }
-
-    @Override
-    public void testStarted(Description description) throws Exception {
-    }
-
-	@Override
-    public void testFinished(Description description) throws Exception {
-    }
-
-    @Override
-    public void testFailure(Failure failure) throws Exception {
-    }
-
-    @Override
-    public void testAssumptionFailure(Failure failure) {
-    }
-
-    @Override
-    public void testIgnored(Description description) throws Exception {
-    }
 
 }

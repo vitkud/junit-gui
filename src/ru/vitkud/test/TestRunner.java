@@ -1,11 +1,16 @@
 package ru.vitkud.test;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -44,34 +49,18 @@ import org.junit.runner.notification.StoppedByUserException;
 public class TestRunner extends RunListener {
 
 	// Color constants for the progress bar and failure details panel
-	private Color CL_OK;// = Display.getCurrent().getSystemColor(SWT.COLOR_GREEN);
-	private Color CL_FAILURE;// = Display.getCurrent().getSystemColor(SWT.COLOR_MAGENTA);
-	private Color CL_ERROR;// = Display.getCurrent().getSystemColor(SWT.COLOR_RED);
+	private Color clOk;// = Display.getCurrent().getSystemColor(SWT.COLOR_GREEN);
+	private Color clFailure;// = Display.getCurrent().getSystemColor(SWT.COLOR_MAGENTA);
+	private Color clError;// = Display.getCurrent().getSystemColor(SWT.COLOR_RED);
 
 	// color images used in the test tree and failure list
-	@SuppressWarnings("unused") // TODO ...
 	private Image imgNone;
 	private Image imgRunning;
 	private Image imgRun;
-	@SuppressWarnings("unused") // TODO ...
 	private Image imgHasProps;
 	private Image imgFailed;
 	private Image imgError;
-
-	private String suiteName;
-	private Class<?> suite;
-
-	private ArrayList<Description> fTests;
-	private Map<Description, TreeItem> testToNodeMap;
-	private boolean fRunning;
-	private Result result;
-	//private Timer fUpdateTimer;
-	//private boolean fTimerExpired;
-	private int fFailureCount;
-	private List<Description> fSelectedTests;
-
-	@SuppressWarnings("unused") // TODO ...
-	private long fTotalTime;
+	private Map<Image, Integer>	indexesImages; 
 
 //	private static Image[] actionsImages;
 
@@ -87,7 +76,23 @@ public class TestRunner extends RunListener {
 	private MenuItem mntmHideTestNodesOnOpen;
 	private ProgressBar scoreBar;
 	private MenuItem mntmShowTestedNode;
-
+	private ProgressBar progressBar;
+	private Label lblProgressPercent;
+	private StyledText errorMessageStyledText;
+	private Composite compositeResults;
+	private MenuItem mntmSelectAll;
+	private MenuItem mntmDeselectAll;
+	private MenuItem mntmSelectFailed;
+	private MenuItem mntmSelectCurrent;
+	private MenuItem mntmDeselectCurrent;
+	private MenuItem mntmHideTestNodes;
+	private MenuItem mntmExpandAll;
+	private ToolItem tltmSelectAll;
+	private ToolItem tltmDeselectAll;
+	private ToolItem tltmSelectFailed;
+	private ToolItem tltmSelectCurrent;
+	private ToolItem tltmDeselectCurrent;
+	
 	/**
 	 * Launch the application.
 	 * @param args
@@ -109,7 +114,7 @@ public class TestRunner extends RunListener {
 
 	public TestRunner(String suiteName) throws ClassNotFoundException {
 		this.suiteName = suiteName;
-		this.suite = Class.forName(suiteName);
+		this.fSuite = Class.forName(suiteName);
 
 //		loadImages();
 	}
@@ -129,9 +134,6 @@ public class TestRunner extends RunListener {
 		display = Display.getDefault();
 		createContents();
 
-		initColors();
-		loadImages();
-		
 		formCreate();
 		setSuite();
 		formShow();
@@ -145,130 +147,54 @@ public class TestRunner extends RunListener {
 		}
 	}
 
-	private void loadImages() {
-		imgNone = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png");
-		imgRunning = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/1.png");
-		imgRun = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/2.png");
-		imgHasProps = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/3.png");
-		imgFailed = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/4.png");
-		imgError = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/5.png");
+	// XXX @Deprecated
+	public void processMessages() {
+		if (shell.isDisposed())
+			throw new SWTException("Application is closed");
+		else
+			while (display.readAndDispatch());
 	}
 
 	private void initColors() {
-		CL_OK = display.getSystemColor(SWT.COLOR_GREEN);
-		CL_FAILURE = display.getSystemColor(SWT.COLOR_MAGENTA);
-		CL_ERROR = display.getSystemColor(SWT.COLOR_RED);
+		clOk = display.getSystemColor(SWT.COLOR_GREEN);
+		clFailure = display.getSystemColor(SWT.COLOR_MAGENTA);
+		clError = display.getSystemColor(SWT.COLOR_RED);
 	}
 
-	private void setSuite() {
-		if (suite != null) {
-			loadSuiteConfiguration();
-			enableUI(true);
-			initTree();
-		} else {
-			enableUI(false);
-		}
-		
-	}
-
-	private void initTree() {
-		fillTestTree();
-		setup();
-		if (mntmHideTestNodesOnOpen.getSelection()) {
-			// TODO HideTestNodesAction.Execute
-		} else {
-			// TODO ExpandAllNodesAction.Execute;
-		}
-		//TODO TestTree.Selected := TestTree.Items.GetFirstNode;
-	}
-
-	private void fillTestTree() {
-		testTree.removeAll();
-		fTests.clear();
-		testToNodeMap.clear();
-
-		Request request = Request.aClass(suite);
-		Runner runner = request.getRunner();
-		Description rootDescription = runner.getDescription();
-
-		TreeItem rootItem = new TreeItem(testTree, SWT.NONE);
-
-		fillTestTree(rootItem, rootDescription);
-	}
-
-	private void fillTestTree(TreeItem treeItem, Description description) {
-		if (description == null)
-			return;
-
-		treeItem.setText(description.getDisplayName());
-		treeItem.setData(fTests.size());
-		treeItem.setChecked(true); // TODO ...
-		treeItem.setImage(SWTResourceManager.getImage(TestRunner.class, "images/run/0.png"));
-
-		fTests.add(description);
-		testToNodeMap.put(description, treeItem);
-
-		for (Description childDescripton: description.getChildren()) {
-			fillTestTree(new TreeItem(treeItem, SWT.NONE), childDescripton);
-		}
-	}
-
-	private void loadSuiteConfiguration() {
+	private void update() {
 		// TODO Auto-generated method stub
 		
 	}
 
 	private void formCreate() {
-//		fillTestSuite();
 		fTests = new ArrayList<>();
 		testToNodeMap = new HashMap<>();
 		loadConfiguration();
 
-		// TODO setupCustomShortcuts;
+		setUpStateImages();
+		setupCustomShortcuts();
 		testTree.removeAll(); // XXX
 		enableUI(false);
 		clearFailureMessage();
 		setup();
 
 		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
-		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
+		mntmReportMemoryLeakTypeOnShutdown.setSelection(false);
 		mntmReportMemoryLeakTypeOnShutdown.setEnabled(false);
 		
-		// TODO if not FailTestCaseIfMemoryLeakedAction.Enabled then
-		// TODO   FailTestCaseIfMemoryLeakedAction.Checked := False;
-		// TODO IgnoreMemoryLeakInSetUpTearDownAction.Enabled :=
-		// TODO   FailTestCaseIfMemoryLeakedAction.Checked;
-		// TODO if not IgnoreMemoryLeakInSetUpTearDownAction.Enabled then
-		// TODO   IgnoreMemoryLeakInSetUpTearDownAction.Checked := False;
+		if (!mntmFailTestCaseIfMemoryLeaked.isEnabled())
+			mntmFailTestCaseIfMemoryLeaked.setSelection(false);
+		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(mntmFailTestCaseIfMemoryLeaked.getSelection());
+		if (!mntmIgnoreMemoryLeakInSetUpTearDown.getEnabled())
+			mntmIgnoreMemoryLeakInSetUpTearDown.setSelection(false);
 	}
 
+//	private void formDestroy() {
+//		// TODO ...
+//	}
+	
 	private void formShow() {
 		setupGuiNodes();
-	}
-
-	private void setupGuiNodes() {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void setup() {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void clearFailureMessage() {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void enableUI(boolean enable) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void loadConfiguration() {
-		// TODO Auto-generated method stub
-		
 	}
 
 	/**
@@ -312,38 +238,38 @@ public class TestRunner extends RunListener {
 		Menu menu_2 = new Menu(mntmTestTree);
 		mntmTestTree.setMenu(menu_2);
 		
-		MenuItem mntmSelectAll = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectAll = new MenuItem(menu_2, SWT.NONE);
 		mntmSelectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
 		mntmSelectAll.setAccelerator(SWT.CTRL | SWT.ALT | 'A');
 		mntmSelectAll.setText("Select &All" + "\tCtrl+Alt+A");
 		
-		MenuItem mntmDeselectAll = new MenuItem(menu_2, SWT.NONE);
+		mntmDeselectAll = new MenuItem(menu_2, SWT.NONE);
 		mntmDeselectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
 		mntmDeselectAll.setAccelerator(SWT.CTRL | SWT.DEL);
 		mntmDeselectAll.setText("&Deselect All" + "\tCtrl+Del");
 		
-		MenuItem mntmSelectFailed = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectFailed = new MenuItem(menu_2, SWT.NONE);
 		mntmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		mntmSelectFailed.setAccelerator(SWT.CTRL | 'F');
 		mntmSelectFailed.setText("Select Fai&led" + "\tCtrl+F");
 		
-		MenuItem mntmSelectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectCurrent = new MenuItem(menu_2, SWT.NONE);
 		mntmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		mntmSelectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | 'A');
 		mntmSelectCurrent.setText("Select &Current" + "\tShift+Ctrl+A");
 		
-		MenuItem mntmDeselectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmDeselectCurrent = new MenuItem(menu_2, SWT.NONE);
 		mntmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		mntmDeselectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | SWT.DEL);
 		mntmDeselectCurrent.setText("Deselect C&urrent" + "\tShift+Ctrl+Del");
 		
 		new MenuItem(menu_2, SWT.SEPARATOR);
 		
-		MenuItem mntmHideTestNodes = new MenuItem(menu_2, SWT.NONE);
+		mntmHideTestNodes = new MenuItem(menu_2, SWT.NONE);
 		mntmHideTestNodes.setAccelerator(SWT.CTRL | 'H');
 		mntmHideTestNodes.setText("&Hide Test Nodes" + "\tCtrl+H");
 		
-		MenuItem mntmExpandAll = new MenuItem(menu_2, SWT.NONE);
+		mntmExpandAll = new MenuItem(menu_2, SWT.NONE);
 		mntmExpandAll.setAccelerator(SWT.CTRL | 'P');
 		mntmExpandAll.setText("Ex&pand All" + "\tCtrl+P");
 		
@@ -423,6 +349,7 @@ public class TestRunner extends RunListener {
 		mntmFailTestCaseIfMemoryLeaked.setText("Fail TestCase if memory leaked");
 		
 		mntmIgnoreMemoryLeakInSetUpTearDown = new MenuItem(menu_3, SWT.CHECK);
+		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(false);
 		mntmIgnoreMemoryLeakInSetUpTearDown.setText("Ignore memory leak in SetUp/TearDown");
 		
 		MenuItem mntmActions = new MenuItem(menu, SWT.CASCADE);
@@ -435,7 +362,7 @@ public class TestRunner extends RunListener {
 		mntmRun.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				run();
+				runActionExecute();
 			}
 		});
 		mntmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
@@ -470,29 +397,29 @@ public class TestRunner extends RunListener {
 		fd_toolBar.left = new FormAttachment(0);
 		toolBar.setLayoutData(fd_toolBar);
 		
-		ToolItem tltmSelectall = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectall.setToolTipText("Select all tests");
-		tltmSelectall.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
+		tltmSelectAll = new ToolItem(toolBar, SWT.NONE);
+		tltmSelectAll.setToolTipText("Select all tests");
+		tltmSelectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
 		
-		ToolItem tltmDeselectall = new ToolItem(toolBar, SWT.NONE);
-		tltmDeselectall.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
-		tltmDeselectall.setToolTipText("Deselect all tests");
-		
-		new ToolItem(toolBar, SWT.SEPARATOR);
-		
-		ToolItem tltmSelectfailed = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectfailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
-		tltmSelectfailed.setToolTipText("Select all failed tests");
+		tltmDeselectAll = new ToolItem(toolBar, SWT.NONE);
+		tltmDeselectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
+		tltmDeselectAll.setToolTipText("Deselect all tests");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
-		ToolItem tltmSelectcurrent = new ToolItem(toolBar, SWT.NONE);
-		tltmSelectcurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
-		tltmSelectcurrent.setToolTipText("Select current test");
+		tltmSelectFailed = new ToolItem(toolBar, SWT.NONE);
+		tltmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
+		tltmSelectFailed.setToolTipText("Select all failed tests");
 		
-		ToolItem tltmDeselectcurrent = new ToolItem(toolBar, SWT.NONE);
-		tltmDeselectcurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
-		tltmDeselectcurrent.setToolTipText("Deselect current test");
+		new ToolItem(toolBar, SWT.SEPARATOR);
+		
+		tltmSelectCurrent = new ToolItem(toolBar, SWT.NONE);
+		tltmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
+		tltmSelectCurrent.setToolTipText("Select current test");
+		
+		tltmDeselectCurrent = new ToolItem(toolBar, SWT.NONE);
+		tltmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
+		tltmDeselectCurrent.setToolTipText("Deselect current test");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
@@ -500,7 +427,7 @@ public class TestRunner extends RunListener {
 		tltmRun.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				run();
+				runActionExecute();
 			}
 		});
 		tltmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
@@ -511,6 +438,23 @@ public class TestRunner extends RunListener {
 		tltmRunselectedtest.setToolTipText("Run current test");
 		
 		ToolItem tltmStop = new ToolItem(toolBar, SWT.NONE);
+		tltmStop.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				updateTestTreeState();
+//				for (int i = 0; i < 600; i++) {
+//					processMessages();
+//					try {
+//						Thread.sleep(100);
+//						if (i % 10 == 0)
+//							System.out.println(i);
+//					} catch (InterruptedException e1) {
+//						// TODO Auto-generated catch block
+//						e1.printStackTrace();
+//					}
+//				}
+			}
+		});
 		tltmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		tltmStop.setToolTipText("Stop");
 
@@ -541,6 +485,23 @@ public class TestRunner extends RunListener {
 		lblTestHierarchy.setText("Test Hi&erarchy:");
 		
 		testTree = new Tree(compositeTree, SWT.BORDER | SWT.CHECK);
+		testTree.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				if (e.item != null && testTree.getSelectionCount() > 0 && e.item == testTree.getSelection()[0]) {
+					tableFailureList.deselectAll();
+					for (TableItem tableItem: tableFailureList.getItems()) {
+						if (tableItem.getData() == e.item) {
+							tableFailureList.setSelection(tableItem);
+							break;
+						}
+					}
+				}
+				if (e.detail == SWT.CHECK) {
+					updateStatus(true);
+				}
+			}
+		});
 		testTree.setToolTipText("Hierarchy of test cases. Checked test cases will be run.");
 		FormData fd_testTree = new FormData();
 		fd_testTree.top = new FormAttachment(lblTestHierarchy, 4);
@@ -570,7 +531,7 @@ public class TestRunner extends RunListener {
 		trtmTest_1.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
 		trtmTest_1.setText("Test2");
 		
-		Composite compositeResults = new Composite(sashForm, SWT.NONE);
+		compositeResults = new Composite(sashForm, SWT.NONE);
 		compositeResults.setLayout(new FormLayout());
 		
 		Composite compositeProgressAndScore = new Composite(compositeResults, SWT.BORDER);
@@ -591,7 +552,7 @@ public class TestRunner extends RunListener {
 		lblProgress.setLayoutData(fd_lblProgress);
 		lblProgress.setText("Progress:");
 		
-		ProgressBar progressBar = new ProgressBar(compositeProgressAndScore, SWT.NONE);
+		progressBar = new ProgressBar(compositeProgressAndScore, SWT.NONE);
 		progressBar.setToolTipText("Shows the proportion of tests run");
 		FormData fd_progressBar = new FormData();
 		fd_progressBar.height = 12;
@@ -617,7 +578,7 @@ public class TestRunner extends RunListener {
 		fd_scoreBar.left = new FormAttachment(progressBar, 0, SWT.LEFT);
 		scoreBar.setLayoutData(fd_scoreBar);
 		
-		Label lblProgressPercent = new Label(compositeProgressAndScore, SWT.RIGHT);
+		lblProgressPercent = new Label(compositeProgressAndScore, SWT.RIGHT);
 		FormData fd_lblProgressPercent = new FormData();
 		fd_lblProgressPercent.top = new FormAttachment(lblScore, 0, SWT.TOP);
 		fd_lblProgressPercent.left = new FormAttachment(scoreBar, 6);
@@ -625,7 +586,7 @@ public class TestRunner extends RunListener {
 		lblProgressPercent.setLayoutData(fd_lblProgressPercent);
 		lblProgressPercent.setText("Progress");
 		
-		tableResults = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
+		tableResults = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION | SWT.HIDE_SELECTION);
 		tableResults.setToolTipText("Shows statistics about the current/last run");
 		FormData fd_tableResults = new FormData();
 		fd_tableResults.height = 16;
@@ -634,14 +595,6 @@ public class TestRunner extends RunListener {
 		fd_tableResults.left = new FormAttachment(0, 0);
 		tableResults.setLayoutData(fd_tableResults);
 		tableResults.setHeaderVisible(true);
-		
-		tableFailureList = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
-		tableFailureList.setToolTipText("Shows the list of failed tests");
-		FormData fd_tableFailureList = new FormData();
-		fd_tableFailureList.bottom = new FormAttachment(100, -3);
-		fd_tableFailureList.left = new FormAttachment(0, 0);
-		fd_tableFailureList.right = new FormAttachment(100, 0);
-		fd_tableFailureList.top = new FormAttachment(tableResults, 3);
 		
 		TableColumn tableColumn = new TableColumn(tableResults, SWT.NONE);
 		tableColumn.setWidth(8);
@@ -676,6 +629,14 @@ public class TestRunner extends RunListener {
 		
 		TableItem tableItem = new TableItem(tableResults, SWT.NONE);
 		tableItem.setText(new String[] {"", "1", "2", "3", "4", "5", "6", "7"});
+
+		tableFailureList = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
+		tableFailureList.setToolTipText("Shows the list of failed tests");
+		FormData fd_tableFailureList = new FormData();
+		fd_tableFailureList.bottom = new FormAttachment(100, -3);
+		fd_tableFailureList.left = new FormAttachment(0, 0);
+		fd_tableFailureList.right = new FormAttachment(100, 0);
+		fd_tableFailureList.top = new FormAttachment(tableResults, 3);
 		tableFailureList.setLayoutData(fd_tableFailureList);
 		tableFailureList.setHeaderVisible(true);
 		
@@ -698,28 +659,316 @@ public class TestRunner extends RunListener {
 		Composite compositeErrorBox = new Composite(sashForm, SWT.NONE);
 		compositeErrorBox.setLayout(new FormLayout());
 		
-		StyledText styledText = new StyledText(compositeErrorBox, SWT.BORDER);
-		styledText.setText("ErrorMessageRTF");
-		FormData fd_styledText = new FormData();
-		fd_styledText.bottom = new FormAttachment(100);
-		fd_styledText.right = new FormAttachment(100);
-		fd_styledText.top = new FormAttachment(0, 3);
-		fd_styledText.left = new FormAttachment(0);
-		styledText.setLayoutData(fd_styledText);
+		errorMessageStyledText = new StyledText(compositeErrorBox, SWT.BORDER);
+		errorMessageStyledText.setText("ErrorMessageRTF");
+		FormData fd_errorMessageStyledText = new FormData();
+		fd_errorMessageStyledText.bottom = new FormAttachment(100);
+		fd_errorMessageStyledText.right = new FormAttachment(100);
+		fd_errorMessageStyledText.top = new FormAttachment(0, 3);
+		fd_errorMessageStyledText.left = new FormAttachment(0);
+		errorMessageStyledText.setLayoutData(fd_errorMessageStyledText);
 		sashForm.setWeights(new int[] {200, 150, 50});
 
 	}
 
-	protected void run() {
-		if (suite == null)
+	private void expandAllNodesActionExecute() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void hideTestNodesActionExecute() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	private void runActionExecute() {
+		if (fSuite == null)
 			return;
 
 		setup();
 		runTheTest();
 	}
 
-	private void runTheTest() {
-		if (suite == null)
+
+	private void resetProgress() {
+		scoreBar.setBackground(null);
+		scoreBar.update();
+		scoreBar.setSelection(0);
+		progressBar.setSelection(0);
+		lblProgressPercent.setText("");
+		
+	}
+
+	private String suiteName;
+
+	protected Class<?> fSuite;
+	protected Result fTestResult;
+	protected boolean fRunning;
+	protected ArrayList<Description> fTests;
+	private Map<Description, TreeItem> testToNodeMap;
+	protected List<Description> fSelectedTests;
+	protected long fTotalTime;
+	protected int fFailureCount;
+	protected int fTotalTestCount;
+
+	protected void setup() {
+		tableFailureList.clearAll();
+		resetProgress();
+		update();
+
+		TableItem item = tableResults.getItem(0);
+		if (fSuite != null) {
+			int i = countEnabledTestCases();
+			item.setText(1, Integer.toString(i));
+			progressBar.setMaximum(i);
+		} else {
+			item.setText(1, "");
+			progressBar.setMaximum(10000);
+		}
+		scoreBar.setMaximum(progressBar.getMaximum());
+		
+		item.setText(2, "");
+		item.setText(3, "");
+		item.setText(4, "");
+		item.setText(5, "");
+		item.setText(6, "");
+		item.setText(7, "");
+
+		Deque<TreeItem> stack = new ArrayDeque<>();
+		stack.addAll(Arrays.asList(testTree.getItems()));
+		while (stack.size() > 0) {
+			TreeItem node = stack.pop();
+			node.setImage(imgNone);
+			stack.addAll(Arrays.asList(node.getItems()));
+		}
+		updateTestTreeState();
+	}
+
+	protected void setUpStateImages() {
+		imgNone = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png");
+		imgRunning = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/1.png");
+		imgRun = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/2.png");
+		imgHasProps = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/3.png");
+		imgFailed = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/4.png");
+		imgError = SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/5.png");
+		indexesImages = new HashMap<>();
+		indexesImages.put(imgNone, 0);
+		indexesImages.put(imgRunning, 1);
+		indexesImages.put(imgRun, 2);
+		indexesImages.put(imgHasProps, 3);
+		indexesImages.put(imgFailed, 4);
+		indexesImages.put(imgError, 5);
+		initColors();
+	}
+
+	protected void setSuite() {
+		if (fSuite != null) {
+			loadSuiteConfiguration();
+			enableUI(true);
+			initTree();
+		} else {
+			enableUI(false);
+		}
+	}
+
+	protected void clearFailureMessage() {
+		errorMessageStyledText.setText("");
+	}
+
+
+	protected TableItem addFailureItem(Failure failure) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	private String formatElapsedTime(long milli) {
+		long h = milli / 3600000;
+		milli = milli % 3600000;
+		long nn = milli / 60000;
+		milli = milli % 60000;
+		long ss = milli / 1000;
+		milli = milli % 1000;
+		long zzz = milli;
+		return String.format("%d:%02d:%02d.%03d", h, nn, ss, zzz);
+	}
+
+	protected void updateStatus(boolean fullUpdate) {
+		if (tableResults.getItemCount() == 0)
+			return;
+
+		if (fullUpdate) {
+			fTotalTestCount = countEnabledTestCases();
+			if (fSuite != null)
+				tableResults.getItem(0).setText(1, Integer.toString(fTotalTestCount));
+			else
+				tableResults.getItem(0).setText(1, "");
+		}
+
+		if (fTestResult != null) {
+			// Save the test number as we use it a lot
+			int testNumber = fTestResult.getRunCount();
+
+			if (fullUpdate || (testNumber & 15) == 0) {
+				TableItem item = tableResults.getItem(0);
+				item.setText(2, Integer.toString(testNumber));
+				item.setText(3, Integer.toString(fTestResult.getFailureCount()));
+				item.setText(4, Integer.toString(fTestResult.getIgnoreCount())); // XXX (errorCount)
+				item.setText(5, Integer.toString(fTestResult.getIgnoreCount())); // XXX (Overrides)
+				item.setText(6, formatElapsedTime(fTestResult.getRunTime()));
+				item.setText(7, formatElapsedTime(Math.max(fTestResult.getRunTime(), fTotalTime)));
+
+				scoreBar.setSelection(testNumber - (fTestResult.getFailureCount() + fTestResult.getIgnoreCount()));
+				progressBar.setSelection(testNumber);
+
+				// There is a possibility for zero tests
+				if (testNumber == 0 && fTotalTestCount == 0)
+					lblProgressPercent.setText("100%");
+				else
+					lblProgressPercent.setText(Integer.toString(100 * scoreBar.getSelection() / scoreBar.getMaximum()) + "%");
+			}
+			// Allow just the results pane to catch up
+
+			compositeResults.update();
+	    } else {
+	    	TableItem item = tableResults.getItem(0);
+	    	if (item.getText(1).equals("0") || item.getText(1).equals("")) {
+	    		for (int i = 2; i <= 7; ++i)
+	    			item.setText(i, "");
+	    	} else if (!item.getText(1).equals(item.getText(2))) {
+	    		for (int i = 2; i <= 7; ++i)
+	    			item.setText(i, "");
+	    	} else {
+				item.setText(6, formatElapsedTime(getElapsedTestTime(getSelectedTest())));
+				item.setText(7, formatElapsedTime(Math.max(getElapsedTestTime(getSelectedTest()), fTotalTime)));
+	    	}
+
+	    	resetProgress();
+	    }
+
+		if (fullUpdate) {
+			// Allow the whole display to catch up and check for key strokes
+
+			shell.update();
+			processMessages();
+		}
+	}
+
+
+	protected void fillTestTree() {
+		testTree.removeAll();
+		fTests.clear();
+		testToNodeMap.clear();
+
+		Request request = Request.aClass(fSuite);
+		Runner runner = request.getRunner();
+		Description rootDescription = runner.getDescription();
+
+		TreeItem rootItem = new TreeItem(testTree, SWT.NONE);
+
+		fillTestTree(rootItem, rootDescription);
+	}
+
+	protected void fillTestTree(TreeItem treeItem, Description description) {
+		if (description == null)
+			return;
+
+		treeItem.setText(description.getDisplayName());
+		treeItem.setData(fTests.size());
+		treeItem.setChecked(new Random().nextInt(10) > 2); // TODO ...
+		treeItem.setImage(SWTResourceManager.getImage(TestRunner.class, "images/run/0.png"));
+
+		fTests.add(description);
+		testToNodeMap.put(description, treeItem);
+
+		for (Description childDescripton: description.getChildren()) {
+			fillTestTree(new TreeItem(treeItem, SWT.NONE), childDescripton);
+		}
+	}
+
+
+	protected void updateNodeImage(TreeItem node) {
+		if (node.getChecked() && node.getParentItem() != null && 
+				(!node.getParentItem().getChecked() || node.getParentItem().getGrayed())) {
+			node.setGrayed(true);
+		} else { 
+			node.setGrayed(false);
+		}
+	}
+
+	protected void updateNodeState(TreeItem node) {
+		assert node != null;
+		Description test = nodeToTest(node);
+		assert test != null;
+
+		updateNodeImage(node);
+
+		for (TreeItem childNode: node.getItems()) {
+			updateNodeState(childNode);
+		}
+	}
+
+	protected void updateTestTreeState() {
+		if (testTree.getItemCount() > 0) {
+			testTree.setRedraw(false);
+			try {
+				for (TreeItem node: testTree.getItems()) {
+					updateNodeState(node);
+				}
+			} finally {
+				testTree.setRedraw(true);
+				testTree.update();
+			}
+		}
+	}
+
+
+	protected void makeNodeVisible(TreeItem node) {
+		node.getParent().showItem(node);
+	}
+
+	protected void setTreeNodeImage(TreeItem node, Image image) {
+		while (node != null) {
+			if (indexesImages.get(image).intValue() > indexesImages.get(node.getImage()).intValue()) {
+				node.setImage(image);
+			}
+			if (image == imgRunning)
+				node = null;
+			else 
+				node = node.getParentItem();
+		}
+	}
+
+
+	protected Description nodeToTest(TreeItem node) {
+		assert node != null;
+
+		int idx = (int) node.getData();
+		assert idx >=0 && idx < fTests.size();
+		return fTests.get(idx);
+	}
+
+	protected TreeItem testToNode(Description test) {
+		return testToNodeMap.get(test);
+	}
+
+
+	protected void enableUI(boolean enable) {
+		mntmSelectAll.setEnabled(enable);
+		tltmSelectAll.setEnabled(enable);
+		mntmDeselectAll.setEnabled(enable);
+		tltmDeselectAll.setEnabled(enable);
+		mntmSelectFailed.setEnabled(enable);
+		tltmSelectFailed.setEnabled(enable);
+		mntmSelectCurrent.setEnabled(enable);
+		tltmSelectCurrent.setEnabled(enable);
+		mntmDeselectCurrent.setEnabled(enable);
+		tltmDeselectCurrent.setEnabled(enable);
+		mntmHideTestNodes.setEnabled(enable);
+		mntmExpandAll.setEnabled(enable);
+	}
+
+	protected void runTheTest() {
+		if (fSuite == null)
 			return;
 
 		if (fRunning) {
@@ -732,7 +981,7 @@ public class TestRunner extends RunListener {
 		fRunning = true;
 		try {
 
-			Request request = Request.aClass(suite).filterWith(new RunTheTestFilter());
+			Request request = Request.aClass(fSuite).filterWith(new RunTheTestFilter());
 			Runner runner = request.getRunner();
 
 			// TODO RunAction.Enabled  := False;
@@ -746,8 +995,8 @@ public class TestRunner extends RunListener {
 
 			final RunNotifier notifier = new RunNotifier();
 			notifier.addListener(new RunTheTestListener());
-			result = new Result();
-			RunListener listener = result.createListener();
+			fTestResult = new Result();
+			RunListener listener = fTestResult.createListener();
 			notifier.addListener(listener);
 			try {
 				// TODO TestResult.BreakOnFailures := BreakOnFailuresAction.Checked;
@@ -756,13 +1005,13 @@ public class TestRunner extends RunListener {
 				// TODO TestResult.IgnoresMemoryLeakInSetUpTearDown := IgnoreMemoryLeakInSetUpTearDownAction.Checked;
 				notifier.fireTestRunStarted(runner.getDescription());
 				runner.run(notifier);
-				notifier.fireTestRunFinished(result);
+				notifier.fireTestRunFinished(fTestResult);
 			} catch (StoppedByUserException e) {
 				// not interesting
 			} finally {
 				// TODO ? FErrorCount := TestResult.ErrorCount;
 				//fIgnoreCount = result.getIgnoreCount();
-				fFailureCount = result.getFailureCount();
+				fFailureCount = fTestResult.getFailureCount();
 				// TODO ? TestResult.Free;
 				// TODO ?TestResult := nil;
 			}
@@ -772,11 +1021,48 @@ public class TestRunner extends RunListener {
 		}
 	}
 
-	private TreeItem testToNode(Description test) {
-		return testToNodeMap.get(test);
+
+	protected void initTree() {
+		//fTests.clear();
+		fillTestTree(/*suite*/);
+		setup();
+		if (mntmHideTestNodesOnOpen.getSelection()) {
+			hideTestNodesActionExecute();
+		} else {
+			expandAllNodesActionExecute();
+		}
+		if (testTree.getItemCount() > 0)
+			testTree.setSelection(testTree.getItem(0));
 	}
 
-	public class RunTheTestFilter extends Filter {
+
+	protected void loadConfiguration() {
+		// TODO Auto-generated method stub
+		
+	}
+
+
+	protected void loadSuiteConfiguration() {
+		// TODO Auto-generated method stub
+		
+	}
+
+
+	protected void clearStatusMessage() {
+		errorMessageStyledText.setText("");
+	}
+
+
+	protected void setupCustomShortcuts() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	protected void setupGuiNodes() {
+		// do nothing: testToNodeMap already filled in fillTestTree()
+	}
+
+	private class RunTheTestFilter extends Filter {
 
 		@Override
 		public boolean shouldRun(Description description) {
@@ -794,6 +1080,7 @@ public class TestRunner extends RunListener {
 		}
 
 	}
+
 
 	private class RunTheTestListener extends RunListener {
 
@@ -886,19 +1173,20 @@ public class TestRunner extends RunListener {
 
 	}
 
-	protected void testingStarts(Description description) {
+
+	public void testingStarts(Description description) {
     	fTotalTime = 0;
     	updateStatus(true);
-    	scoreBar.setBackground(CL_OK);
+    	scoreBar.setBackground(clOk);
     	scoreBar.update();
 	}
 
-	protected void testingEnds(Result result) {
+	public void testingEnds(Result result) {
 		fTotalTime = result.getRunTime();
 	}
 
-	protected void startTest(Description description) {
-    	assert result != null;
+	public void startTest(Description description) {
+    	assert fTestResult != null;
     	assert description != null;
     	TreeItem node = testToNode(description);
     	assert node != null;
@@ -911,59 +1199,66 @@ public class TestRunner extends RunListener {
 		updateStatus(false);
 	}
 
-	protected void endTest(Description description) {
+	public void endTest(Description description) {
 		updateStatus(false);
 	}
 
-	protected void addSuccess(Description description) {
+	public void addSuccess(Description description) {
 		assert description != null;
 		setTreeNodeImage(testToNode(description), imgRun);
 	}
 
-	protected void addError(Failure failure) {
+	public void addError(Failure failure) {
 		TableItem item = addFailureItem(failure);
 		item.setImage(imgError);
-		scoreBar.setBackground(CL_ERROR);
+		scoreBar.setBackground(clError);
 		scoreBar.update();
 
 		setTreeNodeImage(testToNode(failure.getDescription()), imgError);
 		updateStatus(false);
 	}
 
-	protected void addFailure(Failure failure) {
+	public void addFailure(Failure failure) {
 		TableItem item = addFailureItem(failure);
 		item.setImage(imgFailed);
-		if (!CL_ERROR.equals(scoreBar.getBackground())) {
-			scoreBar.setBackground(CL_FAILURE);
+		if (!clError.equals(scoreBar.getBackground())) {
+			scoreBar.setBackground(clFailure);
 			scoreBar.update();
 		}
 		setTreeNodeImage(testToNode(failure.getDescription()), imgFailed);
 		updateStatus(false);
 	}
 
-	private TableItem addFailureItem(Failure failure) {
+
+	private long getElapsedTestTime(Description test) {
 		// TODO Auto-generated method stub
-		return null;
+		return 0;
 	}
 
-	private void updateStatus(boolean b) {
-		// TODO Auto-generated method stub
-		
+	private Description getSelectedTest() {
+		if (testTree.getSelectionCount() == 0)
+			return null;
+		return fTests.get((int) testTree.getSelection()[0].getData());
 	}
 
-	private void setTreeNodeImage(TreeItem node, Image imgRunning2) {
-		// TODO Auto-generated method stub
-		
+	private int countEnabledTestCases(TreeItem treeItem) {
+		int result = 0;
+		if (treeItem.getChecked()) {
+			for (TreeItem childItem: treeItem.getItems()) {
+				result += countEnabledTestCases(childItem);
+			}
+			if ((fTests.get((int) treeItem.getData())).isTest())
+				result++;
+		}
+		return result;
 	}
-
-	private void makeNodeVisible(TreeItem node) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void clearStatusMessage() {
-		// TODO Auto-generated method stub
-		
+	
+	private int countEnabledTestCases() {
+		int result = 0;
+		for (TreeItem treeItem: testTree.getItems()) {
+			result += countEnabledTestCases(treeItem);
+		}
+		return result;
 	}
 
 //	private void fillTestSuite() {

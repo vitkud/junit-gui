@@ -1,13 +1,19 @@
 package ru.vitkud.test;
 
+import java.beans.Beans;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.Properties;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTException;
@@ -15,6 +21,8 @@ import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.ShellAdapter;
+import org.eclipse.swt.events.ShellEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
@@ -48,6 +56,70 @@ import org.junit.runner.notification.StoppedByUserException;
 
 public class TestRunner extends RunListener {
 
+	/**
+	 * Launch the application.
+	 * @param args
+	 */	
+	public static void main(String[] args) {
+		try {
+			if (args.length == 0) {
+				System.out.println("Missing Test class name");
+				System.exit(2);
+			}
+			System.exit(runTest(Class.forName(args[0])));
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(1);
+		}
+	}
+
+	public static int runTest(Class<?> test) {
+		TestRunner window = new TestRunner();
+		window.setSuite(test);
+		window.open();
+		return window.getfFailureCount();
+	}
+
+	private static final String TEST_INI_FILE = "junit-gui.properties";
+	private static final String CN_CONFIG_INI_SECTION = "Config";
+
+	protected Display display;
+	protected Shell shell;
+	private ToolBar toolBar;
+	private Tree testTree;
+	private Table tableResults;
+	private Table tableFailureList;
+	private MenuItem mntmSelectAll;
+	private MenuItem mntmDeselectAll;
+	private MenuItem mntmSelectFailed;
+	private MenuItem mntmSelectCurrent;
+	private MenuItem mntmDeselectCurrent;
+	private MenuItem mntmHideTestNodes;
+	private MenuItem mntmExpandAll;
+	private MenuItem mntmAutoSave;
+	private MenuItem mntmErrorBoxVisible;
+	private MenuItem mntmHideTestNodesOnOpen;
+	private MenuItem mntmShowTestedNode;
+	private MenuItem mntmBreakOnFailures;
+	private MenuItem mntmUseRegistry;
+	private MenuItem mntmWarnIfFailTestOverridden;
+	private MenuItem mntmFailTestCaseIfNoChecksExecuted;
+	private MenuItem mntmReportMemoryLeakTypeOnShutdown;
+	private MenuItem mntmFailTestCaseIfMemoryLeaked;
+	private MenuItem mntmIgnoreMemoryLeakInSetUpTearDown;
+	private ToolItem tltmSelectAll;
+	private ToolItem tltmDeselectAll;
+	private ToolItem tltmSelectFailed;
+	private ToolItem tltmSelectCurrent;
+	private ToolItem tltmDeselectCurrent;
+	private SashForm sashForm;
+	private Composite compositeResults;
+	private ProgressBar progressBar;
+	private ProgressBar scoreBar;
+	private Label lblProgressPercent;
+	private Composite compositeErrorBox;
+	private StyledText errorMessageStyledText;
+	
 	// Color constants for the progress bar and failure details panel
 	private Color clOk;// = Display.getCurrent().getSystemColor(SWT.COLOR_GREEN);
 	private Color clFailure;// = Display.getCurrent().getSystemColor(SWT.COLOR_MAGENTA);
@@ -62,82 +134,19 @@ public class TestRunner extends RunListener {
 	private Image imgError;
 	private Map<Image, Integer>	indexesImages; 
 
-//	private static Image[] actionsImages;
+	public TestRunner() {
+		display = Display.getDefault();
+		createContents();
 
-	protected Display display;
-	protected Shell shell;
-	private ToolBar toolBar;
-	private Table tableResults;
-	private Table tableFailureList;
-	private Tree testTree;
-	private MenuItem mntmFailTestCaseIfMemoryLeaked;
-	private MenuItem mntmReportMemoryLeakTypeOnShutdown;
-	private MenuItem mntmIgnoreMemoryLeakInSetUpTearDown;
-	private MenuItem mntmHideTestNodesOnOpen;
-	private ProgressBar scoreBar;
-	private MenuItem mntmShowTestedNode;
-	private ProgressBar progressBar;
-	private Label lblProgressPercent;
-	private StyledText errorMessageStyledText;
-	private Composite compositeResults;
-	private MenuItem mntmSelectAll;
-	private MenuItem mntmDeselectAll;
-	private MenuItem mntmSelectFailed;
-	private MenuItem mntmSelectCurrent;
-	private MenuItem mntmDeselectCurrent;
-	private MenuItem mntmHideTestNodes;
-	private MenuItem mntmExpandAll;
-	private ToolItem tltmSelectAll;
-	private ToolItem tltmDeselectAll;
-	private ToolItem tltmSelectFailed;
-	private ToolItem tltmSelectCurrent;
-	private ToolItem tltmDeselectCurrent;
-	
-	/**
-	 * Launch the application.
-	 * @param args
-	 */	
-	public static void main(String[] args) {
-		try {
-			if (args.length == 0) {
-				System.out.println("Missing Test class name");
-				System.exit(2);
-			}
-			TestRunner window = new TestRunner(args[0]);
-			window.open();
-			System.exit(window.getfFailureCount());
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.exit(1);
+		if (!Beans.isDesignTime()) {
+			formCreate();
 		}
 	}
-
-	public TestRunner(String suiteName) throws ClassNotFoundException {
-		this.suiteName = suiteName;
-		this.fSuite = Class.forName(suiteName);
-
-//		loadImages();
-	}
-
-//	private void loadImages() {
-//	{
-//		actionsImages = new Image[11];
-//		for (int i = 0; i < actionsImages.length; ++i) {
-//			actionsImages[i] = new Image(Display.getDefault(), getClass().getResourceAsStream("images/actions/" + i + ".png"));
-//		}
-//	}
 
 	/**
 	 * Open the window.
 	 */
 	public void open() {
-		display = Display.getDefault();
-		createContents();
-
-		formCreate();
-		setSuite();
-		formShow();
-
 		shell.open();
 		shell.layout();
 		while (!shell.isDisposed()) {
@@ -155,17 +164,14 @@ public class TestRunner extends RunListener {
 			while (display.readAndDispatch());
 	}
 
-	private void initColors() {
-		clOk = display.getSystemColor(SWT.COLOR_GREEN);
-		clFailure = display.getSystemColor(SWT.COLOR_MAGENTA);
-		clError = display.getSystemColor(SWT.COLOR_RED);
+	private List<TreeItem> getAllTestTreeItems() {
+		List<TreeItem> result = new ArrayList<>(Arrays.asList(testTree.getItems()));
+		for (int i = 0; i < result.size(); ++i) {
+			Collections.addAll(result, result.get(i).getItems());
+		}
+		return result;
 	}
-
-	private void update() {
-		// TODO Auto-generated method stub
-		
-	}
-
+	
 	private void formCreate() {
 		fTests = new ArrayList<>();
 		testToNodeMap = new HashMap<>();
@@ -189,9 +195,11 @@ public class TestRunner extends RunListener {
 			mntmIgnoreMemoryLeakInSetUpTearDown.setSelection(false);
 	}
 
-//	private void formDestroy() {
-//		// TODO ...
-//	}
+	private void formDestroy() {
+		// TODO ...
+		autoSaveConfiguration();
+		// TODO ...
+	}
 	
 	private void formShow() {
 		setupGuiNodes();
@@ -202,11 +210,21 @@ public class TestRunner extends RunListener {
 	 */
 	protected void createContents() {
 		shell = new Shell();
+		shell.addShellListener(new ShellAdapter() {
+			@Override
+			public void shellActivated(ShellEvent e) {
+				formShow();
+			}
+			@Override
+			public void shellClosed(ShellEvent e) {
+				formDestroy();
+			}
+		});
 		shell.setMinimumSize(new Point(300, 200));
 		shell.setSize(500, 500);
-		shell.setText("JUnit GUI - " + suiteName);
+		shell.setText("JUnit GUI");
 		FormLayout fl_shell = new FormLayout();
-		fl_shell.marginBottom = 4;
+		fl_shell.marginBottom = 1;
 		fl_shell.marginRight = 4;
 		fl_shell.marginLeft = 4;
 		shell.setLayout(fl_shell);
@@ -302,11 +320,11 @@ public class TestRunner extends RunListener {
 		Menu menu_3 = new Menu(mntmOptions);
 		mntmOptions.setMenu(menu_3);
 		
-		MenuItem mntmAutoSaveConfiguration = new MenuItem(menu_3, SWT.CHECK);
-		mntmAutoSaveConfiguration.setSelection(true);
-		mntmAutoSaveConfiguration.setText("&Auto Save Configuration");
+		mntmAutoSave = new MenuItem(menu_3, SWT.CHECK);
+		mntmAutoSave.setSelection(true);
+		mntmAutoSave.setText("&Auto Save Configuration");
 		
-		MenuItem mntmErrorBoxVisible = new MenuItem(menu_3, SWT.CHECK);
+		mntmErrorBoxVisible = new MenuItem(menu_3, SWT.CHECK);
 		mntmErrorBoxVisible.setSelection(true);
 		mntmErrorBoxVisible.setText("&Error Box Visible");
 		
@@ -321,10 +339,10 @@ public class TestRunner extends RunListener {
 		mntmShowTestedNode.setSelection(true);
 		mntmShowTestedNode.setText("&Show Tested Node");
 		
-		MenuItem mntmBreakOnFailures = new MenuItem(menu_3, SWT.CHECK);
+		mntmBreakOnFailures = new MenuItem(menu_3, SWT.CHECK);
 		mntmBreakOnFailures.setText("&Break on Failures");
 		
-		MenuItem mntmUseRegistry = new MenuItem(menu_3, SWT.CHECK);
+		mntmUseRegistry = new MenuItem(menu_3, SWT.CHECK);
 		mntmUseRegistry.setText("Use Registry");
 		
 		new MenuItem(menu_3, SWT.SEPARATOR);
@@ -332,12 +350,12 @@ public class TestRunner extends RunListener {
 		MenuItem mntmShowTestCasesWithRunTimeProperties = new MenuItem(menu_3, SWT.CHECK);
 		mntmShowTestCasesWithRunTimeProperties.setText("Show TestCases with RunTime Properties");
 		
-		MenuItem mntmWarnIfFailTestOverridden = new MenuItem(menu_3, SWT.CHECK);
+		mntmWarnIfFailTestOverridden = new MenuItem(menu_3, SWT.CHECK);
 		mntmWarnIfFailTestOverridden.setText("Warn if Fail Test Overridden");
 		
 		new MenuItem(menu_3, SWT.SEPARATOR);
 
-		MenuItem mntmFailTestCaseIfNoChecksExecuted = new MenuItem(menu_3, SWT.CHECK);
+		mntmFailTestCaseIfNoChecksExecuted = new MenuItem(menu_3, SWT.CHECK);
 		mntmFailTestCaseIfNoChecksExecuted.setText("Fail TestCase if no checks executed");
 		
 		new MenuItem(menu_3, SWT.SEPARATOR);
@@ -442,17 +460,6 @@ public class TestRunner extends RunListener {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				updateTestTreeState();
-//				for (int i = 0; i < 600; i++) {
-//					processMessages();
-//					try {
-//						Thread.sleep(100);
-//						if (i % 10 == 0)
-//							System.out.println(i);
-//					} catch (InterruptedException e1) {
-//						// TODO Auto-generated catch block
-//						e1.printStackTrace();
-//					}
-//				}
 			}
 		});
 		tltmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
@@ -465,7 +472,7 @@ public class TestRunner extends RunListener {
 		fd_toolBarSeparator.left = new FormAttachment(0);
 		toolBarSeparator.setLayoutData(fd_toolBarSeparator);
 
-		SashForm sashForm = new SashForm(shell, SWT.VERTICAL);
+		sashForm = new SashForm(shell, SWT.VERTICAL);
 		FormData fd_sashForm = new FormData();
 		fd_sashForm.top = new FormAttachment(toolBarSeparator, 4);
 		fd_sashForm.right = new FormAttachment(100);
@@ -656,13 +663,13 @@ public class TestRunner extends RunListener {
 		tblclmnLocation.setWidth(60);
 		tblclmnLocation.setText("Location");
 		
-		Composite compositeErrorBox = new Composite(sashForm, SWT.NONE);
+		compositeErrorBox = new Composite(sashForm, SWT.NONE);
 		compositeErrorBox.setLayout(new FormLayout());
 		
 		errorMessageStyledText = new StyledText(compositeErrorBox, SWT.BORDER);
 		errorMessageStyledText.setText("ErrorMessageRTF");
 		FormData fd_errorMessageStyledText = new FormData();
-		fd_errorMessageStyledText.bottom = new FormAttachment(100);
+		fd_errorMessageStyledText.bottom = new FormAttachment(100, -3);
 		fd_errorMessageStyledText.right = new FormAttachment(100);
 		fd_errorMessageStyledText.top = new FormAttachment(0, 3);
 		fd_errorMessageStyledText.left = new FormAttachment(0);
@@ -671,14 +678,31 @@ public class TestRunner extends RunListener {
 
 	}
 
-	private void expandAllNodesActionExecute() {
-		// TODO Auto-generated method stub
-		
+	void hideTestNodesActionExecute() {
+		if (testTree.getItemCount() == 0)
+			return;
+
+		testTree.setRedraw(false);
+		try {
+			if (testTree.getItemCount() > 0) { // XXX only one root node is processed
+				TreeItem node = testTree.getItem(0);
+				node.setExpanded(true);
+				collapseNonGrandparentNodes(node);
+				selectNode(node);
+			}
+		} finally {
+			testTree.setRedraw(true);
+			testTree.update();
+		}
 	}
 
-	private void hideTestNodesActionExecute() {
-		// TODO Auto-generated method stub
-		
+	void expandAllNodesActionExecute() {
+		for(TreeItem node: getAllTestTreeItems())
+			node.setExpanded(true);
+		if (testTree.getSelectionCount() > 0)
+			testTree.showSelection();
+		else if (testTree.getItemCount() > 0)
+			testTree.select(testTree.getItem(0)); // XXX may be need call testTree.showSelection();
 	}
 
 	private void runActionExecute() {
@@ -699,7 +723,8 @@ public class TestRunner extends RunListener {
 		
 	}
 
-	private String suiteName;
+	private int fPopupX;
+	private int fPopupY;
 
 	protected Class<?> fSuite;
 	protected Result fTestResult;
@@ -714,7 +739,7 @@ public class TestRunner extends RunListener {
 	protected void setup() {
 		tableFailureList.clearAll();
 		resetProgress();
-		update();
+		shell.update();
 
 		TableItem item = tableResults.getItem(0);
 		if (fSuite != null) {
@@ -761,9 +786,16 @@ public class TestRunner extends RunListener {
 		initColors();
 	}
 
-	protected void setSuite() {
+	private void initColors() {
+		clOk = display.getSystemColor(SWT.COLOR_GREEN);
+		clFailure = display.getSystemColor(SWT.COLOR_MAGENTA);
+		clError = display.getSystemColor(SWT.COLOR_RED);
+	}
+
+	public void setSuite(Class<?> value) {
+		fSuite = value;
 		if (fSuite != null) {
-			loadSuiteConfiguration();
+			//loadSuiteConfiguration(); // moved into initTree()
 			enableUI(true);
 			initTree();
 		} else {
@@ -872,10 +904,8 @@ public class TestRunner extends RunListener {
 		if (description == null)
 			return;
 
-		treeItem.setText(description.getDisplayName());
+		treeItem.setText(getShortDisplayName(description));
 		treeItem.setData(fTests.size());
-		treeItem.setChecked(new Random().nextInt(10) > 2); // TODO ...
-		treeItem.setImage(SWTResourceManager.getImage(TestRunner.class, "images/run/0.png"));
 
 		fTests.add(description);
 		testToNodeMap.put(description, treeItem);
@@ -936,6 +966,11 @@ public class TestRunner extends RunListener {
 			else 
 				node = node.getParentItem();
 		}
+	}
+
+	protected void selectNode(TreeItem node) {
+		node.getParent().select(node);
+		makeNodeVisible(node);
 	}
 
 
@@ -1025,6 +1060,7 @@ public class TestRunner extends RunListener {
 	protected void initTree() {
 		//fTests.clear();
 		fillTestTree(/*suite*/);
+		loadSuiteConfiguration(); // moved from setSuite()
 		setup();
 		if (mntmHideTestNodesOnOpen.getSelection()) {
 			hideTestNodesActionExecute();
@@ -1035,16 +1071,237 @@ public class TestRunner extends RunListener {
 			testTree.setSelection(testTree.getItem(0));
 	}
 
+	protected String iniFileName() {
+		return new File(System.getProperty("user.dir"), TEST_INI_FILE).getPath();
+	}
 
-	protected void loadConfiguration() {
-		// TODO Auto-generated method stub
+	protected ICustomIniFile getIniFile(String fileName) {
+		if (mntmUseRegistry.getSelection()) {
+			// TODO: tRegistryIniFile.Create( GetDUnitRegistryKey + FileName )
+			return null;
+		} else
+			return new TIniFile(fileName);
+	}
+
+	protected void writeToIniFile(String fileName, Properties props) {
+		if (mntmUseRegistry.getSelection()) {
+			// TODO: ...
+		} else {
+			try (OutputStream os = new FileOutputStream(fileName)) {
+				props.store(os, null);
+			} catch (IOException e) {
+				// XXX do nothing
+				e.printStackTrace();
+			}
+		}
+	}
+
+
+	private void loadRegistryAction() {
+		try (ICustomIniFile ini = new TIniFile(iniFileName())) {
+			mntmUseRegistry.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"UseRegistry", mntmUseRegistry.getSelection()));
+		}
+	}
+
+	private void saveRegistryAction() {
+		if (mntmUseRegistry.getSelection())
+			new File(iniFileName()).delete();
+
+		try (ICustomIniFile ini = new TIniFile(iniFileName())) {
+			ini.writeBool(CN_CONFIG_INI_SECTION, "UseRegistry", mntmUseRegistry.getSelection());
+		}
+	}
+
+
+	private void loadFormPlacement() {
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+			shell.setBounds(
+					ini.readInteger(CN_CONFIG_INI_SECTION, "Left", shell.getLocation().x),
+					ini.readInteger(CN_CONFIG_INI_SECTION, "Top", shell.getLocation().y),
+					ini.readInteger(CN_CONFIG_INI_SECTION, "Width", shell.getSize().x),
+					ini.readInteger(CN_CONFIG_INI_SECTION, "Height", shell.getSize().y)
+			);
+			if (ini.readBool(CN_CONFIG_INI_SECTION, "Maximized", false))
+				shell.setMaximized(true);
+		}
+	}
+
+	private void saveFormPlacement() {
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+			ini.writeBool(CN_CONFIG_INI_SECTION, "AutoSave", mntmAutoSave.getSelection());
+
+			if (!shell.getMaximized()) {
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "Left", shell.getLocation().x);
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "Top", shell.getLocation().y);
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "Width", shell.getSize().x);
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "Height", shell.getSize().y);
+			}
+
+			ini.writeBool(CN_CONFIG_INI_SECTION, "Maximized", shell.getMaximized());
+		}
 		
 	}
 
 
+	protected void saveConfiguration() {
+		if (fSuite != null)
+			saveSuiteConfiguration();
+
+		saveFormPlacement();
+		saveRegistryAction();
+
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+				// splitter locations
+			int[] weights = sashForm.getWeights();
+			for (int i = 0; i < weights.length; ++i) {
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "sashForm.weights[" + i + "]", weights[i]);
+			}
+
+			// error box
+			ini.writeBool(CN_CONFIG_INI_SECTION, "ErrorMessage.Visible", mntmErrorBoxVisible.getSelection());
+
+			// failure list configuration
+			for (int i = 0; i < tableFailureList.getColumnCount(); ++i) {
+				ini.writeInteger(CN_CONFIG_INI_SECTION, "FailureList.ColumnWidth[" + i + "]",
+						tableFailureList.getColumn(i).getWidth());
+			}
+
+		    // other options
+			ini.writeBool(CN_CONFIG_INI_SECTION, "HideTestNodesOnOpen", mntmHideTestNodesOnOpen.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "BreakOnFailures", mntmBreakOnFailures.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "FailOnNoChecksExecuted", mntmFailTestCaseIfNoChecksExecuted.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "FailOnMemoryLeaked", mntmFailTestCaseIfMemoryLeaked.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "IgnoreSetUpTearDownLeaks", mntmIgnoreMemoryLeakInSetUpTearDown.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "ReportMemoryLeakTypes", mntmReportMemoryLeakTypeOnShutdown.getSelection());
+			ini.writeBool(CN_CONFIG_INI_SECTION, "SelectTestedNode", mntmShowTestedNode.getSelection()); 
+			ini.writeBool(CN_CONFIG_INI_SECTION, "WarnOnFailTestOverride", mntmWarnIfFailTestOverridden.getSelection());
+			ini.writeInteger(CN_CONFIG_INI_SECTION, "PopupX", fPopupX);
+			ini.writeInteger(CN_CONFIG_INI_SECTION, "PopupY", fPopupY);
+		}
+	}
+
+	protected void loadConfiguration() {
+		loadRegistryAction();
+		loadFormPlacement();
+		loadSuiteConfiguration();
+
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+			mntmAutoSave.setSelection(ini.readBool(CN_CONFIG_INI_SECTION, "AutoSave", mntmAutoSave.getSelection()));
+
+			// splitter locations
+			int[] weights = sashForm.getWeights();
+			for (int i = 0; i < weights.length; ++i) {
+				weights[i] = ini.readInteger(CN_CONFIG_INI_SECTION, "sashForm.weights[" + i + "]", weights[i]);
+			}
+			sashForm.setWeights(weights);
+	
+			// error box
+			mntmErrorBoxVisible.setSelection(ini.readBool(CN_CONFIG_INI_SECTION, "ErrorMessage.Visible",
+					mntmErrorBoxVisible.getSelection()));
+	
+			compositeErrorBox.setVisible(mntmErrorBoxVisible.getSelection());
+			// XXX fix SWT problem
+			if (!mntmErrorBoxVisible.getSelection()) {
+				Point size = shell.getSize();
+				shell.setSize(size.x + 1, size.y);
+				shell.setSize(size);
+			}
+
+			// failure list configuration
+			for (int i = 0; i < tableFailureList.getColumnCount(); ++i) {
+				TableColumn column = tableFailureList.getColumn(i);
+				column.setWidth(ini.readInteger(CN_CONFIG_INI_SECTION, "FailureList.ColumnWidth[" + i + "]", column.getWidth()));
+			}
+	
+		    // other options
+			mntmHideTestNodesOnOpen.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"HideTestNodesOnOpen", mntmHideTestNodesOnOpen.getSelection()));
+			mntmBreakOnFailures.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"BreakOnFailures", mntmBreakOnFailures.getSelection()));
+			mntmFailTestCaseIfNoChecksExecuted.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"FailOnNoChecksExecuted", mntmFailTestCaseIfNoChecksExecuted.getSelection()));
+			mntmFailTestCaseIfMemoryLeaked.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"FailOnMemoryLeaked", mntmFailTestCaseIfMemoryLeaked.getSelection()));
+			mntmIgnoreMemoryLeakInSetUpTearDown.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"IgnoreSetUpTearDownLeaks", mntmIgnoreMemoryLeakInSetUpTearDown.getSelection()));
+			mntmReportMemoryLeakTypeOnShutdown.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"ReportMemoryLeakTypes", mntmReportMemoryLeakTypeOnShutdown.getSelection()));
+			mntmWarnIfFailTestOverridden.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"WarnOnFailTestOverride", mntmWarnIfFailTestOverridden.getSelection()));
+			mntmShowTestedNode.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
+					"SelectTestedNode", mntmShowTestedNode.getSelection()));
+			fPopupX = ini.readInteger(CN_CONFIG_INI_SECTION, "PopupX", 350);
+			fPopupY = ini.readInteger(CN_CONFIG_INI_SECTION, "PopupY", 30);
+		}
+
+		if (fSuite != null)
+			updateTestTreeState();
+	}
+
+	private void saveSuiteConfiguration(ICustomIniFile ini, final String section, final TreeItem node) {
+		String testShortDisplayName = getShortDisplayName(nodeToTest(node));
+		if (node.getChecked())
+			ini.deleteKey(section, testShortDisplayName);
+		else
+			ini.writeBool(section, testShortDisplayName, false);
+
+		for(TreeItem childNode: node.getItems()) {
+			saveSuiteConfiguration(ini, section + "." + testShortDisplayName, childNode);
+		}
+	}
+
+	protected void saveSuiteConfiguration() {
+		if (fSuite == null)
+			return;
+
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+			for (TreeItem node: testTree.getItems())
+				saveSuiteConfiguration(ini, "Tests", node);
+		}
+	}
+
+	private void loadSuiteConfiguration(ICustomIniFile ini, final String section, final TreeItem node) {
+		Description test = nodeToTest(node);
+		node.setChecked(ini.readBool(section, getShortDisplayName(test), true));
+
+		for(TreeItem childNode: node.getItems()) {
+			loadSuiteConfiguration(ini, section + "." + getShortDisplayName(test), childNode);
+		}
+	}
+	
 	protected void loadSuiteConfiguration() {
-		// TODO Auto-generated method stub
-		
+		if (fSuite == null)
+			return;
+
+		try (ICustomIniFile ini = getIniFile(iniFileName())) {
+			for (TreeItem node: testTree.getItems())
+				loadSuiteConfiguration(ini, "Tests", node);
+		}
+	}
+
+	protected void autoSaveConfiguration() {
+		if (mntmAutoSave.getSelection())
+			saveConfiguration();
+	}
+
+
+	protected boolean nodeIsGrandparent(TreeItem node) {
+		boolean result = false;
+		for (TreeItem childNode: node.getItems()) {
+			result = childNode.getItemCount() > 0 || result;
+			collapseNonGrandparentNodes(childNode);
+		}
+		return result;
+	}
+
+	protected void collapseNonGrandparentNodes(TreeItem rootNode) {
+		if (!nodeIsGrandparent(rootNode))
+			rootNode.setExpanded(false);
+
+		for (TreeItem childNode: rootNode.getItems()) {
+			collapseNonGrandparentNodes(childNode);
+		}
 	}
 
 
@@ -1261,32 +1518,23 @@ public class TestRunner extends RunListener {
 		return result;
 	}
 
-//	private void fillTestSuite() {
-//		Request request = Request.aClass(testClass);
-//		Runner runner = request.getRunner();
-//		Description rootDescription = runner.getDescription();
-//		TreeItem rootItem = new TreeItem(testTree, 0);
-//		rootItem.setText(rootDescription.getDisplayName());
-//		rootItem.setData(rootDescription);
-//		Deque<TreeItem> stack = new ArrayDeque<>();
-//		stack.push(rootItem);
-//		while (stack.size() > 0) {
-//			TreeItem curItem = stack.pop();
-//			Description curDescription = (Description) curItem.getData();
-//			if (curDescription.isSuite()) {
-//				//TestSuite testSuite = (TestSuite) curTest;
-//				for (Description childDescripton: curDescription.getChildren()) {
-//					TreeItem item = new TreeItem(curItem, 0);
-//					item.setText(childDescripton.toString());
-//					item.setData(childDescripton);
-//					stack.push(item);
-//				}
-//			}
-//		}
-//	}
-
 	public int getfFailureCount() {
 		return fFailureCount;
+	}
+
+	private String getShortDisplayName(Description test) {
+		String result = test.getDisplayName();
+		if (test.isTest()) {
+			String suffix = "(" + test.getClassName() + ")";
+			if (test.getDisplayName().endsWith(suffix))
+				result = result.substring(0, result.length() - suffix.length());
+		}
+		if (test.isSuite()) {
+			int pos = Math.max(result.lastIndexOf('.'), result.lastIndexOf('$'));
+			if (pos >= 0)
+				result = result.substring(pos + 1);
+		}
+		return result;
 	}
 
 }

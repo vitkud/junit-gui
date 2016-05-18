@@ -19,6 +19,8 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.events.KeyAdapter;
+import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.ShellAdapter;
@@ -456,12 +458,6 @@ public class TestRunner extends RunListener {
 		tltmRunselectedtest.setToolTipText("Run current test");
 		
 		ToolItem tltmStop = new ToolItem(toolBar, SWT.NONE);
-		tltmStop.addSelectionListener(new SelectionAdapter() {
-			@Override
-			public void widgetSelected(SelectionEvent e) {
-				updateTestTreeState();
-			}
-		});
 		tltmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		tltmStop.setToolTipText("Stop");
 
@@ -492,19 +488,33 @@ public class TestRunner extends RunListener {
 		lblTestHierarchy.setText("Test Hi&erarchy:");
 		
 		testTree = new Tree(compositeTree, SWT.BORDER | SWT.CHECK);
+		testTree.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (fRunning && e.keyCode == ' ')
+					e.doit = false;
+			}
+		});
 		testTree.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				if (e.item != null && testTree.getSelectionCount() > 0 && e.item == testTree.getSelection()[0]) {
+				TreeItem node = (TreeItem) e.item;
+				if (e.detail == SWT.CHECK) {
+					if (fRunning) {
+						node.setChecked(!node.getChecked()); // cancel change
+					} else {
+						setNodeState(node, node.getChecked());
+					}
+					testTree.select(node);
+				}
+				if (testTree.getSelectionCount() > 0 && node == testTree.getSelection()[0]) {
 					tableFailureList.deselectAll();
 					for (TableItem tableItem: tableFailureList.getItems()) {
-						if (tableItem.getData() == e.item) {
+						if (tableItem.getData() == node) {
 							tableFailureList.setSelection(tableItem);
 							break;
 						}
 					}
-				}
-				if (e.detail == SWT.CHECK) {
 					updateStatus(true);
 				}
 			}
@@ -937,6 +947,33 @@ public class TestRunner extends RunListener {
 		}
 	}
 
+	protected void setNodeState(TreeItem node, boolean enabled) {
+		assert node != null;
+
+		// update ancestors if enabling
+		node.setChecked(enabled);
+
+		TreeItem mostSeniorChanged = node;
+		if (enabled) {
+			while(node.getParentItem() != null) {
+				node = node.getParentItem();
+				if (!node.getChecked()) {
+					// changed
+					node.setChecked(true);
+					mostSeniorChanged = node;
+					updateNodeImage(node);
+				}
+			}
+		}
+		testTree.setRedraw(false);
+		try {
+			updateNodeState(mostSeniorChanged);
+		} finally {
+			testTree.setRedraw(true);
+			testTree.update();
+		}
+	}
+			
 	protected void updateTestTreeState() {
 		if (testTree.getItemCount() > 0) {
 			testTree.setRedraw(false);

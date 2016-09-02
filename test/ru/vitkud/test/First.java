@@ -11,55 +11,36 @@ import org.junit.runners.MethodSorters;
 public class First {
 
 	@Test
-	public void aPause() throws InterruptedException {
-		System.out.println("First.aPause()");
-		Thread.sleep(5000L);
+	public void assumptionFailed() throws Exception {
+		System.out.println("First.assumptionFailed()");
+		Assume.assumeTrue("First.assumptionFailed()", false);
 	}
 
 	@Test
-	public void assumptionFailed() {
-		Assume.assumeTrue(false);
-	}
-	
-	@Test
-	public void foo() throws InterruptedException {
-		Thread.sleep(3000L);
-		Assume.assumeTrue(false);
-		System.out.println("First.foo()");
-		Thread.sleep(3000L);
+	public void done() throws Exception {
+		System.out.println("First.done()");
+		Assert.assertTrue(true);
 	}
 
 	@Test
-	public void bar() throws InterruptedException {
-		Thread.sleep(3000L);
-		System.out.println("First.bar()");
-		Thread.sleep(3000L);
+	public void exceptionFailed() throws Exception {
+		System.out.println("First.exceptionFailed()");
+		throw new Exception("First.exceptionFailed()");
 	}
 
 	@Test
-	@Ignore
+	public void failed() throws Exception {
+		System.out.println("First.failed()");
+		Assert.fail("First.failed()");
+	}
+
+	@Test @Ignore
 	public void ignored() throws InterruptedException {
-		Thread.sleep(3000L);
 		System.out.println("First.ignored()");
-		Thread.sleep(3000L);
-	}
-
-	@Test
-	public void sleep() throws InterruptedException {
-		Thread.sleep(5000L);
-	}
-
-	@Test
-	public void fail() {
-		Assert.fail();
-	}
-
-	@Test
-	public void exception() throws Exception {
-		throw new Exception("Exception");
 	}
 
 	@Test(expected = Exception.class)
 	public void noException() throws Exception {
+		System.out.println("First.noException()");
 	}
 }

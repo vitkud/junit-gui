@@ -36,6 +36,7 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ProgressBar;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
@@ -56,7 +57,7 @@ import org.junit.runner.notification.RunListener;
 import org.junit.runner.notification.RunNotifier;
 import org.junit.runner.notification.StoppedByUserException;
 
-public class TestRunner extends RunListener {
+public class TestRunner implements ITestListener {
 
 	/**
 	 * Launch the application.
@@ -957,8 +958,60 @@ public class TestRunner extends RunListener {
 
 
 	protected TableItem addFailureItem(Failure failure) {
-		// TODO Auto-generated method stub
-		return null;
+		assert failure != null;
+		TableItem item = new TableItem(tableFailureList, SWT.NONE);
+		item.setData(testToNode(failure.getDescription()));
+		item.setText(getShortDisplayName(failure.getDescription()));
+		int column = 1;
+		if (failure.getException() != null) {
+			item.setText(column++, failure.getException().getClass().getSimpleName());
+			if (failure.getException().getMessage() != null)
+				item.setText(column++, failure.getException().getMessage());
+			else
+				item.setText(column++, "");
+			item.setText(column++, getLocationFromException(failure.getException()));
+			item.setText(column++, failure.getTrace());
+		}
+
+		TreeItem node = testToNode(failure.getDescription());
+		while (node != null) {
+			node.setExpanded(true);
+			node = node.getParentItem();
+		}
+
+		return item;
+	}
+
+	private String getLocationFromException(Throwable exception) {
+		if (exception == null || exception.getStackTrace() == null)
+			return "";
+		StackTraceElement[] stack = exception.getStackTrace();
+		for (StackTraceElement element: stack)
+			if (!filterLine(element.toString()))
+				return (element.getFileName() != null && element.getLineNumber() >= 0
+						? element.getFileName() + ":" + element.getLineNumber()
+						: element.getFileName() != null ? element.getFileName() : "(Unknown Source)")
+						+ " " + element.getClassName() + "." + element.getMethodName()
+						+ (element.isNativeMethod() ? "(Native Method)" : "");
+		return "";
+	}
+
+	private static final String[] STACK_FILTER_PATTERNS = new String[] {
+			"junit.framework.TestCase.",
+			"junit.framework.TestResult.",
+			"junit.framework.TestResult$1.",
+			"junit.framework.TestSuite.",
+			"junit.framework.Assert.",
+			"org.junit.",
+			"java.lang.reflect.Method.invoke",
+			"sun.reflect.",
+	};
+
+	private boolean filterLine(String line) {
+		for (String pattern: STACK_FILTER_PATTERNS)
+			if (line.indexOf(pattern) >= 0)
+				return true;
+		return false;
 	}
 
 	private String formatElapsedTime(long milli) {
@@ -976,6 +1029,8 @@ public class TestRunner extends RunListener {
 		if (tableResults.getItemCount() == 0)
 			return;
 
+		String prevTotal = tableResults.getItem(0).getText(1);
+
 		if (fullUpdate) {
 			fTotalTestCount = countEnabledTestCases();
 			if (fSuite != null)
@@ -992,13 +1047,13 @@ public class TestRunner extends RunListener {
 				TableItem item = tableResults.getItem(0);
 				item.setText(2, Integer.toString(testNumber));
 				item.setText(3, Integer.toString(fTestResult.getFailureCount()));
-				item.setText(4, Integer.toString(fTestResult.getIgnoreCount())); // XXX (errorCount)
+				item.setText(4, Integer.toString(0)); // XXX (errorCount)
 				item.setText(5, Integer.toString(fTestResult.getIgnoreCount())); // XXX (Overrides)
 				item.setText(6, formatElapsedTime(fTestResult.getRunTime()));
 				item.setText(7, formatElapsedTime(Math.max(fTestResult.getRunTime(), fTotalTime)));
 
-				scoreBar.setSelection(testNumber - (fTestResult.getFailureCount() + fTestResult.getIgnoreCount()));
-				progressBar.setSelection(testNumber);
+				scoreBar.setSelection(testNumber - fTestResult.getFailureCount());
+				progressBar.setSelection(testNumber + fTestResult.getIgnoreCount());
 
 				// There is a possibility for zero tests
 				if (testNumber == 0 && fTotalTestCount == 0)
@@ -1014,7 +1069,7 @@ public class TestRunner extends RunListener {
 	    	if (item.getText(1).equals("0") || item.getText(1).equals("")) {
 	    		for (int i = 2; i <= 7; ++i)
 	    			item.setText(i, "");
-	    	} else if (!item.getText(1).equals(item.getText(2))) {
+	    	} else if (!item.getText(1).equals(prevTotal) || item.getText(2).equals("")) {
 	    		for (int i = 2; i <= 7; ++i)
 	    			item.setText(i, "");
 	    	} else {
@@ -1564,109 +1619,134 @@ public class TestRunner extends RunListener {
 	// TODO possible to use @RunListener.ThreadSafe 
 	private class RunTheTestListener extends RunListener {
 
-		boolean lastTestFail;
+		boolean lastTestFail = false;
+		Deque<TreeItem> startedSuites = new ArrayDeque<>();
+		boolean lastSuiteStoppedHalfway = false;
 
-		// This may be called on an arbitrary thread.
+		private void startNewSuite(TreeItem node) {
+			Description startedParentTest = nodeToTest(node);
+			startTest(startedParentTest);
+			startSuite(startedParentTest);
+			startedSuites.push(node);
+		}
+
+		private void stopLastStartedSuite(boolean halfway) {
+			assert !startedSuites.isEmpty();
+			Description endedSuite = nodeToTest(halfway ? startedSuites.peek() : startedSuites.pop());				
+			if (!lastSuiteStoppedHalfway) {
+				endSuite(endedSuite);
+				if (!halfway)
+					addSuccess(endedSuite);
+			}
+			if (!halfway)
+				endTest(endedSuite);
+			lastSuiteStoppedHalfway = halfway;
+		}
+
+		private void stopStartedSuites(TreeItem upToNode) {
+			while(!startedSuites.isEmpty() && startedSuites.peek() != upToNode) {
+				stopLastStartedSuite(false);
+			}
+		}
+
+		private void updateStartedSuites(TreeItem suiteNode) {
+			//if (suiteNode == startedSuites.peekLast()) return; // optimization
+			Deque<TreeItem> newSuites = new ArrayDeque<>();
+			while (suiteNode != null && !startedSuites.contains(suiteNode)) {
+				newSuites.push(suiteNode);
+				suiteNode = suiteNode.getParentItem();
+			}
+			stopStartedSuites(suiteNode);
+
+			while (!newSuites.isEmpty())
+				startNewSuite(newSuites.pop());
+		}
+
+		// XXX This may be called on an arbitrary thread.
 		@Override
 		public void testRunStarted(final Description description) throws Exception {
-	    	if (display.isDisposed()) return;
-	    	display.syncExec(new Runnable() {
-				@Override public void run() {
-			    	if (display.isDisposed()) return;
-					testingStarts(description);
-				}
-			});
+			testingStarts();
 		}
 
-		// This may be called on an arbitrary thread.
+		// XXX This may be called on an arbitrary thread.
 		@Override
 		public void testRunFinished(final Result result) throws Exception {
-	    	if (!display.isDisposed()) {
-	    		display.syncExec(new Runnable() {
-	    			@Override public void run() {
-	    				if (!display.isDisposed())
-	    					testingEnds(result);
-	    			}
-	    		});
-	    	}
+			stopStartedSuites(null);
+			testingEnds(result);
 		}
 
+		@Override
 		public void testStarted(final Description description) throws Exception {
+			updateStartedSuites(testToNode(description).getParentItem());
+			startTest(description);
 			lastTestFail = false;
-	    	if (!display.isDisposed()) {
-	    		display.syncExec(new Runnable() {
-	    			@Override public void run() {
-	    				if (!display.isDisposed())
-	    					startTest(description);
-	    			}
-	    		});
-	    	}
 		}
 
+		@Override
 		public void testFinished(final Description description) throws Exception {
-	    	if (!display.isDisposed()) {
-	    		display.syncExec(new Runnable() {
-	    			@Override public void run() {
-	    				if (!display.isDisposed()) {
-	    					if (!lastTestFail)
-	    						addSuccess(description);
-	    					endTest(description);
-	    				}
-	    			}
-	    		});
-	    	}
+			if (!lastTestFail)
+				addSuccess(description);
+			endTest(description);
 		}
 
-		//  may be called on an arbitrary thread.
+		@Override
 		public void testFailure(final Failure failure) throws Exception {
-			lastTestFail = true;
-			if (!display.isDisposed()) {
-				display.syncExec(new Runnable() {
-					@Override public void run() {
-						if (!display.isDisposed()) {
-							if (failure.getException() instanceof AssertionError)
-								addFailure(failure);
-							else 
-								addError(failure);
-						}
-					}
-				});
+			if (failure.getDescription().equals(Description.TEST_MECHANISM)) {
+				// may be called on an arbitrary thread.
+				showError(failure.getDescription().getDisplayName() + ": " + failure.getMessage());
+				return;
 			}
+			if (failure.getDescription().isSuite()) {
+				updateStartedSuites(testToNode(failure.getDescription()));
+				stopLastStartedSuite(true);
+			}
+			addError(failure);
+			lastTestFail = true;
 		}
 
+		@Override
 		public void testAssumptionFailure(final Failure failure) {
-			lastTestFail = true;
-			if (!display.isDisposed()) {
-				display.syncExec(new Runnable() {
-					@Override public void run() {
-						if (!display.isDisposed()) {
-							addFailure(failure); // TODO ...
-						}
-					}
-				});
+			if (failure.getDescription().isSuite()) {
+				updateStartedSuites(testToNode(failure.getDescription()));
+				stopLastStartedSuite(true);
 			}
+			addFailure(failure);
+			lastTestFail = true;
 		}
 
+		@Override
 		public void testIgnored(Description description) throws Exception {
-			// TODO ..
+			addIgnored(description);
 		}
 
 	}
 
+	private void showError(final String message) {
+		if (!display.isDisposed()) {
+			display.syncExec(new Runnable() {
+				@Override public void run() {
+					if (!display.isDisposed()) {
+				        MessageBox messageBox = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+				        messageBox.setText(shell.getText());
+				        messageBox.setMessage(message);
+				        messageBox.open();
+					}
+				}
+			});
+		}
+	}
 
-	public void testingStarts(Description description) {
+	@Override
+	public void testingStarts() {
     	fTotalTime = 0;
     	updateStatus(true);
     	scoreBar.setBackground(clOk);
     	scoreBar.update();
 	}
 
-	public void testingEnds(Result result) {
-		fTotalTime = result.getRunTime();
-	}
-
+	@Override
 	public void startTest(Description description) {
-    	assert fTestResult != null;
+    	assert fTestResult != null && fNotifier != null;
     	assert description != null;
     	TreeItem node = testToNode(description);
     	assert node != null;
@@ -1679,15 +1759,13 @@ public class TestRunner extends RunListener {
 		updateStatus(false);
 	}
 
-	public void endTest(Description description) {
-		updateStatus(false);
-	}
-
+	@Override
 	public void addSuccess(Description description) {
 		assert description != null;
 		setTreeNodeImage(testToNode(description), imgRun);
 	}
 
+	@Override
 	public void addError(Failure failure) {
 		TableItem item = addFailureItem(failure);
 		item.setImage(imgError);
@@ -1698,6 +1776,7 @@ public class TestRunner extends RunListener {
 		updateStatus(false);
 	}
 
+	@Override
 	public void addFailure(Failure failure) {
 		TableItem item = addFailureItem(failure);
 		item.setImage(imgFailed);
@@ -1709,6 +1788,30 @@ public class TestRunner extends RunListener {
 		updateStatus(false);
 	}
 
+	@Override
+	public void endTest(Description description) {
+		updateStatus(false);
+	}
+
+	@Override
+	public void testingEnds(Result result) {
+		fTotalTime = result.getRunTime();
+	}
+
+	@Override
+	public void startSuite(Description description) {
+
+	}
+
+	@Override
+	public void endSuite(Description description) {
+		updateStatus(true);
+	}
+
+	public void addIgnored(Description description) {
+		testToNode(description).setImage(imgHasProps);
+		updateStatus(false);
+	}
 
 	private long getElapsedTestTime(Description test) {
 		// TODO Auto-generated method stub

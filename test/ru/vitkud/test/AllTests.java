@@ -2,6 +2,7 @@ package ru.vitkud.test;
 
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -25,19 +26,22 @@ public class AllTests {
 		System.out.println("AllTests.tearDownAfterClass()");
 	}
 
-	@Before
+	@Before // Ignored
 	public void setUp() throws Exception {
 		System.out.println("AllTests.setUp()");
+		Assert.fail("AllTests.setUp()");
 	}
 
-	@After
+	@After // Ignored
 	public void tearDown() throws Exception {
 		System.out.println("AllTests.tearDown()");
+		Assert.fail("AllTests.tearDown()");
 	}
 
-	@Test
+	@Test // Ignored
 	public void suiteTest() {
 		System.out.println("AllTests.suiteTest()");
+		Assert.fail("AllTests.suiteTest()");
 	}
 
 }

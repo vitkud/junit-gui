@@ -42,7 +42,10 @@ public class Second {
 	@Test
 	public void hTestSleep3s() throws Exception {
 		System.out.println("Second.hTestSleep3s()");
-		Thread.sleep(3000L);
+		for (int i = 0; i < 29; ++i) {
+			Thread.sleep(100L);
+			if (TestRunner.getInstance()!= null) TestRunner.getInstance().processMessages();
+		}
 	}
 
 	@Test @Ignore("S")

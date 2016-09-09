@@ -18,7 +18,10 @@ import java.util.Properties;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.custom.StyleRange;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.events.ControlAdapter;
+import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -26,6 +29,8 @@ import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.ShellAdapter;
 import org.eclipse.swt.events.ShellEvent;
 import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.FormAttachment;
@@ -76,11 +81,17 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
+	private static TestRunner window = null;
+	
 	public static int runTest(Class<?> test) {
-		TestRunner window = new TestRunner();
+		window = new TestRunner();
 		window.setSuite(test);
 		window.open();
 		return window.getFailureCount();
+	}
+
+	public static TestRunner getInstance() {
+		return window;
 	}
 
 	private static final String TEST_INI_FILE = "junit-gui.properties";
@@ -176,17 +187,10 @@ public class TestRunner implements ITestListener {
 			while (display.readAndDispatch());
 	}
 
-	private List<TreeItem> getAllTestTreeItems() {
-		List<TreeItem> result = new ArrayList<>(Arrays.asList(testTree.getItems()));
-		for (int i = 0; i < result.size(); ++i) {
-			Collections.addAll(result, result.get(i).getItems());
-		}
-		return result;
-	}
-	
 	private void formCreate() {
 		fTests = new ArrayList<>();
 		testToNodeMap = new HashMap<>();
+		fTestTimeMap = new HashMap<Description, TestTime>();
 		loadConfiguration();
 
 		setUpStateImages();
@@ -316,16 +320,34 @@ public class TestRunner implements ITestListener {
 		mntmDeselectAll.setText("&Deselect All" + "\tCtrl+Del");
 		
 		mntmSelectFailed = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectFailed.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectFailedActionExecute();
+			}
+		});
 		mntmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		mntmSelectFailed.setAccelerator(SWT.CTRL | 'F');
 		mntmSelectFailed.setText("Select Fai&led" + "\tCtrl+F");
 		
 		mntmSelectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmSelectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectCurrentActionExecute();
+			}
+		});
 		mntmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		mntmSelectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | 'A');
 		mntmSelectCurrent.setText("Select &Current" + "\tShift+Ctrl+A");
 		
 		mntmDeselectCurrent = new MenuItem(menu_2, SWT.NONE);
+		mntmDeselectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				deselectCurrentActionExecute();
+			}
+		});
 		mntmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		mntmDeselectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | SWT.DEL);
 		mntmDeselectCurrent.setText("Deselect C&urrent" + "\tShift+Ctrl+Del");
@@ -454,6 +476,12 @@ public class TestRunner implements ITestListener {
 		mntmRunSelectedTest2.setText("Run selected test" + "\tF8");
 		
 		mntmStop = new MenuItem(menu_4, SWT.NONE);
+		mntmStop.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				stopActionExecute();
+			}
+		});
 		mntmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		mntmStop.setAccelerator(SWT.CTRL | SWT.F2);
 		mntmStop.setText("&Stop" + "\tCtrl+F2");
@@ -499,16 +527,34 @@ public class TestRunner implements ITestListener {
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		tltmSelectFailed = new ToolItem(toolBar, SWT.NONE);
+		tltmSelectFailed.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectFailedActionExecute();
+			}
+		});
 		tltmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		tltmSelectFailed.setToolTipText("Select all failed tests");
 		
 		new ToolItem(toolBar, SWT.SEPARATOR);
 		
 		tltmSelectCurrent = new ToolItem(toolBar, SWT.NONE);
+		tltmSelectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectCurrentActionExecute();
+			}
+		});
 		tltmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		tltmSelectCurrent.setToolTipText("Select current test");
 		
 		tltmDeselectCurrent = new ToolItem(toolBar, SWT.NONE);
+		tltmDeselectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				deselectCurrentActionExecute();
+			}
+		});
 		tltmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		tltmDeselectCurrent.setToolTipText("Deselect current test");
 		
@@ -529,6 +575,12 @@ public class TestRunner implements ITestListener {
 		tltmRunselectedtest.setToolTipText("Run current test");
 		
 		tltmStop = new ToolItem(toolBar, SWT.NONE);
+		tltmStop.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				stopActionExecute();
+			}
+		});
 		tltmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		tltmStop.setToolTipText("Stop");
 
@@ -680,40 +732,62 @@ public class TestRunner implements ITestListener {
 		tableColumn.setWidth(8);
 		
 		TableColumn tblclmnTests = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnTests.setWidth(70);
+		tblclmnTests.setWidth(64);
 		tblclmnTests.setText("Tests");
 		
 		TableColumn tblclmnRun = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnRun.setWidth(70);
+		tblclmnRun.setWidth(64);
 		tblclmnRun.setText("Run");
 		
 		TableColumn tblclmnFailures = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnFailures.setWidth(70);
+		tblclmnFailures.setWidth(64);
 		tblclmnFailures.setText("Failures");
 		
-		TableColumn tblclmnErrors = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnErrors.setWidth(70);
-		tblclmnErrors.setText("Errors");
+		TableColumn tblclmnSkipped = new TableColumn(tableResults, SWT.RIGHT);
+		tblclmnSkipped.setWidth(64);
+		tblclmnSkipped.setText("Skipped");
 		
-		TableColumn tblclmnOverrides = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnOverrides.setWidth(70);
-		tblclmnOverrides.setText("Overrides");
+		TableColumn tblclmnIgnored = new TableColumn(tableResults, SWT.RIGHT);
+		tblclmnIgnored.setWidth(64);
+		tblclmnIgnored.setText("Ignored");
 		
 		TableColumn tblclmnTestTime = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnTestTime.setWidth(52);
+		tblclmnTestTime.setWidth(76);
 		tblclmnTestTime.setText("Test Time");
 		
 		TableColumn tblclmnTotalTime = new TableColumn(tableResults, SWT.RIGHT);
-		tblclmnTotalTime.setWidth(70);
+		tblclmnTotalTime.setWidth(76);
 		tblclmnTotalTime.setText("Total Time");
 		
 		TableItem tableItem = new TableItem(tableResults, SWT.NONE);
 		tableItem.setText(new String[] {"", "1", "2", "3", "4", "5", "6", "7"});
 
 		tableFailureList = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION);
+		tableFailureList.addControlListener(new ControlAdapter() {
+			@Override
+			public void controlResized(ControlEvent e) {
+				int columnsWidth = 0;
+				for (int i = 0; i < tableFailureList.getColumnCount() - 1; i++)
+					columnsWidth += tableFailureList.getColumn(i).getWidth();
+				TableColumn lastColumn = tableFailureList.getColumn(tableFailureList.getColumnCount() - 1);
+				lastColumn.setWidth(Math.max(tableFailureList.getClientArea().width - columnsWidth, 60));
+			}
+		});
 		tableFailureList.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
+				if (tableFailureList.getSelectionIndex() != -1) {
+					TableItem item = tableFailureList.getItem(tableFailureList.getSelectionIndex());
+					TreeItem node = (TreeItem) item.getData();
+					if (testTree.getSelectionCount() == 0 || testTree.getSelection()[0] != node) {
+						testTree.setSelection(node);
+						testTreeChange();
+					} else {
+						displayFailureMessage(item);
+					}
+				} else {
+					clearFailureMessage();
+				}
 				copyMessageToClipboardActionUpdate();
 			}
 		});
@@ -745,7 +819,9 @@ public class TestRunner implements ITestListener {
 		compositeErrorBox = new Composite(sashForm, SWT.NONE);
 		compositeErrorBox.setLayout(new FormLayout());
 		
-		errorMessageStyledText = new StyledText(compositeErrorBox, SWT.BORDER);
+		errorMessageStyledText = new StyledText(compositeErrorBox, SWT.BORDER | SWT.V_SCROLL | SWT.WRAP);
+		errorMessageStyledText.setEditable(false);
+		errorMessageStyledText.setAlwaysShowScrollBars(false);
 		errorMessageStyledText.setText("ErrorMessageRTF");
 		FormData fd_errorMessageStyledText = new FormData();
 		fd_errorMessageStyledText.bottom = new FormAttachment(100, -3);
@@ -758,27 +834,73 @@ public class TestRunner implements ITestListener {
 	}
 
 	void selectAllActionExecute() {
-		applyToTests(testTree.getItems()[0], new EnableTest());
+		for (TreeItem rootNode: testTree.getItems())
+			applyToTests(rootNode, new EnableTest());
 		updateStatus(true);
+		runActionUpdate();
 	}
 
 	void deselectAllActionExecute() {
-		applyToTests(testTree.getItems()[0], new DisableTest());
+		for (TreeItem rootNode: testTree.getItems())
+			applyToTests(rootNode, new DisableTest());
 		updateStatus(true);
+		runActionUpdate();
 	}
-	
+
+	void selectFailedActionExecute() {
+		// deselect all
+		for (TreeItem rootNode: testTree.getItems())
+			applyToTests(rootNode, new DisableTest());
+
+		// select failed
+		for (TableItem item: tableFailureList.getItems()) {
+			TreeItem node = (TreeItem) item.getData();
+			setNodeState(node, true);
+		}
+		updateStatus(true);
+		runActionUpdate();
+	}
+
+	void selectCurrentActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			applyToTests(testTree.getSelection()[0], new EnableTest());
+			setNodeState(testTree.getSelection()[0], true);
+			updateStatus(true);
+			runActionUpdate();
+		}
+	}
+
+	void deselectCurrentActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			applyToTests(testTree.getSelection()[0], new DisableTest());
+			updateStatus(true);
+			runActionUpdate();
+		}
+	}
+
+	private List<TreeItem> getAllTestTreeItems() {
+		List<TreeItem> result = new ArrayList<>(Arrays.asList(testTree.getItems()));
+		for (int i = 0; i < result.size(); ++i) {
+			Collections.addAll(result, result.get(i).getItems());
+		}
+		return result;
+	}
+
+	private void fullExpandTestTree() {
+		for (TreeItem node: getAllTestTreeItems())
+			node.setExpanded(true);
+	}
+
 	void hideTestNodesActionExecute() {
 		if (testTree.getItemCount() == 0)
 			return;
 
 		testTree.setRedraw(false);
 		try {
-			if (testTree.getItemCount() > 0) { // XXX only one root node is processed
-				TreeItem node = testTree.getItem(0);
-				node.setExpanded(true);
+			fullExpandTestTree();
+			for (TreeItem node: testTree.getItems())
 				collapseNonGrandparentNodes(node);
-				selectNode(node);
-			}
+			selectNode(testTree.getItem(0));
 		} finally {
 			testTree.setRedraw(true);
 			testTree.update();
@@ -786,8 +908,7 @@ public class TestRunner implements ITestListener {
 	}
 
 	void expandAllNodesActionExecute() {
-		for(TreeItem node: getAllTestTreeItems())
-			node.setExpanded(true);
+		fullExpandTestTree();
 		if (testTree.getSelectionCount() > 0)
 			testTree.showSelection();
 		else if (testTree.getItemCount() > 0) {
@@ -815,6 +936,11 @@ public class TestRunner implements ITestListener {
 		mntmCopyErrorMessageToClipboard.setEnabled(enabled);
 	}
 
+	private void stopActionExecute() {
+		if (fTestResult != null && fNotifier != null)
+			fNotifier.pleaseStop();
+	}
+
 	private void stopActionUpdate() {
 		boolean enabled = fRunning && fTestResult != null && fNotifier != null;
 		mntmStop.setEnabled(enabled);
@@ -825,9 +951,11 @@ public class TestRunner implements ITestListener {
 		if (testTree.getSelectionCount() > 0) {
 			TreeItem node = testTree.getSelection()[0];
 			tableFailureList.deselectAll();
-			for (TableItem tableItem: tableFailureList.getItems()) {
-				if (tableItem.getData() == node) {
-					tableFailureList.setSelection(tableItem);
+			clearFailureMessage();
+			for (int i = 0; i < tableFailureList.getItemCount(); ++i) {
+				if (tableFailureList.getItem(i).getData() == node) {
+					tableFailureList.select(i); // XXX no showSelection()
+					displayFailureMessage(tableFailureList.getItem(i));
 					break;
 				}
 			}
@@ -837,7 +965,7 @@ public class TestRunner implements ITestListener {
 		copyTestnameToClipboardActionUpdate();
 		runSelectedTestActionUpdate();
 	}
-	
+
 	private void copyTestnameToClipboardActionUpdate() {
 		Description selectedTest = getSelectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
@@ -852,12 +980,27 @@ public class TestRunner implements ITestListener {
 		tltmRunselectedtest.setEnabled(enabled);
 	}
 
-    private void resetProgress() {
+	private void resetProgress() {
 		scoreBar.setBackground(null);
 		scoreBar.update();
 		scoreBar.setSelection(0);
 		progressBar.setSelection(0);
 		lblProgressPercent.setText("");
+	}
+
+	protected static class TestTime {
+		private long startTime;
+		private long endTime;
+		public TestTime() {
+			startTime = System.currentTimeMillis();
+			endTime = 0;
+		}
+		public void stop() {
+			endTime = System.currentTimeMillis();
+		}
+		public long getElapsed() {
+			return (endTime != 0 ? endTime : System.currentTimeMillis()) - startTime;
+		}
 	}
 
 	private int fPopupX;
@@ -866,11 +1009,13 @@ public class TestRunner implements ITestListener {
 	protected Class<?> fSuite;
 	protected Result fTestResult;
 	protected RunNotifier fNotifier;
+	protected int fAssumptionFailureCount;
 	protected boolean fRunning;
 	protected ArrayList<Description> fTests;
 	private Map<Description, TreeItem> testToNodeMap;
 	protected List<Description> fSelectedTests;
 	protected long fTotalTime;
+	protected Map<Description, TestTime> fTestTimeMap;
 	protected int fFailureCount;
 	protected int fIgnoreCount;
 	protected int fTotalTestCount;
@@ -952,6 +1097,72 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
+	private void displayFailureMessage(TableItem item) {
+		Color hlColor = clFailure;
+		if (indexesImages.get(item.getImage()).intValue() >= indexesImages.get(imgError).intValue())
+			hlColor = clError;
+
+		errorMessageStyledText.setText("");
+
+		int start = 0;
+		errorMessageStyledText.setSelection(start);
+		errorMessageStyledText.insert(item.getText() + ": ");
+		int end = errorMessageStyledText.getText().length();
+		StyleRange range = new StyleRange();
+		range.start = start;
+		range.length = end - start;
+		range.fontStyle = SWT.BOLD;
+		errorMessageStyledText.setStyleRange(range);
+
+		start = end;
+		errorMessageStyledText.setSelection(start);
+		errorMessageStyledText.insert(item.getText(1));
+		end = errorMessageStyledText.getText().length();
+		range = new StyleRange();
+		range.start = start;
+		range.length = end - start;
+		range.foreground = hlColor;
+		range.fontStyle = SWT.BOLD;
+		errorMessageStyledText.setStyleRange(range);
+
+		start = end;
+		errorMessageStyledText.setSelection(start);
+		errorMessageStyledText.insert("\r\nat " + item.getText(3));
+		end = errorMessageStyledText.getText().length();
+
+		FontData fontData = errorMessageStyledText.getFont().getFontData()[0];
+
+		if (!item.getText(2).isEmpty()) {
+			start = end;
+			errorMessageStyledText.setSelection(start);
+			errorMessageStyledText.insert("\r\n" + item.getText(2));
+			end = errorMessageStyledText.getText().length();
+			range = new StyleRange();
+			range.start = start;
+			range.length = end - start;
+			range.font = new Font(display, fontData.getName(), 12, fontData.getStyle());
+			errorMessageStyledText.setStyleRange(range);
+		}
+
+		String stack = (String) item.getData("stack");
+		if (stack != null && !stack.isEmpty()) {
+			start = end;
+			errorMessageStyledText.setSelection(start);
+			errorMessageStyledText.insert("\r\nStackTrace\r\n");
+			end = errorMessageStyledText.getText().length();
+			range = new StyleRange();
+			range.start = start;
+			range.length = end - start;
+			range.fontStyle = SWT.BOLD;
+			errorMessageStyledText.setStyleRange(range);
+
+			start = end;
+			errorMessageStyledText.setSelection(start);
+			errorMessageStyledText.insert(stack);
+			end = errorMessageStyledText.getText().length();
+		}
+	}
+
 	protected void clearFailureMessage() {
 		errorMessageStyledText.setText("");
 	}
@@ -970,7 +1181,7 @@ public class TestRunner implements ITestListener {
 			else
 				item.setText(column++, "");
 			item.setText(column++, getLocationFromException(failure.getException()));
-			item.setText(column++, failure.getTrace());
+			item.setData("stack", failure.getTrace());;
 		}
 
 		TreeItem node = testToNode(failure.getDescription());
@@ -1047,7 +1258,7 @@ public class TestRunner implements ITestListener {
 				TableItem item = tableResults.getItem(0);
 				item.setText(2, Integer.toString(testNumber));
 				item.setText(3, Integer.toString(fTestResult.getFailureCount()));
-				item.setText(4, Integer.toString(0)); // XXX (errorCount)
+				item.setText(4, Integer.toString(fAssumptionFailureCount));
 				item.setText(5, Integer.toString(fTestResult.getIgnoreCount())); // XXX (Overrides)
 				item.setText(6, formatElapsedTime(fTestResult.getRunTime()));
 				item.setText(7, formatElapsedTime(Math.max(fTestResult.getRunTime(), fTotalTime)));
@@ -1064,21 +1275,21 @@ public class TestRunner implements ITestListener {
 			// Allow just the results pane to catch up
 
 			compositeResults.update();
-	    } else {
-	    	TableItem item = tableResults.getItem(0);
-	    	if (item.getText(1).equals("0") || item.getText(1).equals("")) {
-	    		for (int i = 2; i <= 7; ++i)
-	    			item.setText(i, "");
-	    	} else if (!item.getText(1).equals(prevTotal) || item.getText(2).equals("")) {
-	    		for (int i = 2; i <= 7; ++i)
-	    			item.setText(i, "");
-	    	} else {
+		} else {
+			TableItem item = tableResults.getItem(0);
+			if (item.getText(1).equals("0") || item.getText(1).equals("")) {
+				for (int i = 2; i <= 7; ++i)
+					item.setText(i, "");
+			} else if (!item.getText(1).equals(prevTotal) || item.getText(2).equals("")) {
+				for (int i = 2; i <= 7; ++i)
+					item.setText(i, "");
+			} else {
 				item.setText(6, formatElapsedTime(getElapsedTestTime(getSelectedTest())));
 				item.setText(7, formatElapsedTime(Math.max(getElapsedTestTime(getSelectedTest()), fTotalTime)));
-	    	}
-
-	    	resetProgress();
-	    }
+			}
+		
+			resetProgress();
+		}
 
 		if (fullUpdate) {
 			// Allow the whole display to catch up and check for key strokes
@@ -1093,6 +1304,7 @@ public class TestRunner implements ITestListener {
 		testTree.removeAll();
 		fTests.clear();
 		testToNodeMap.clear();
+		fTestTimeMap.clear();
 
 		Request request = Request.aClass(fSuite);
 		Runner runner = request.getRunner();
@@ -1246,7 +1458,6 @@ public class TestRunner implements ITestListener {
 			testTree.update();
 		}
 		updateTestTreeState();
-		runActionUpdate();
 	}
 
 	private void doApply(TreeItem rootnode, ITestFunc func) {
@@ -1303,18 +1514,18 @@ public class TestRunner implements ITestListener {
 			Runner runner = request.getRunner();
 			fTestResult = new Result();
 			fNotifier = new RunNotifier(); // reuse is impossible due pleaseStop member
+			fAssumptionFailureCount = 0;
 			RunListener resultListener = fTestResult.createListener();
 			fNotifier.addFirstListener(resultListener);
 			RunListener runTheTestListener = new RunTheTestListener();
 			fNotifier.addListener(runTheTestListener);
 			try {
-				// TODO TestResult.BreakOnFailures := BreakOnFailuresAction.Checked;
 				// TODO TestResult.FailsIfNoChecksExecuted := FailIfNoChecksExecutedAction.Checked;
 				// TODO TestResult.FailsIfMemoryLeaked := FailTestCaseIfMemoryLeakedAction.Checked;
 				// TODO TestResult.IgnoresMemoryLeakInSetUpTearDown := IgnoreMemoryLeakInSetUpTearDownAction.Checked;
 				fNotifier.fireTestRunStarted(runner.getDescription());
-	            runner.run(fNotifier);
-	            fNotifier.fireTestRunFinished(fTestResult);
+				runner.run(fNotifier);
+				fNotifier.fireTestRunFinished(fTestResult);
 			} catch (StoppedByUserException e) {
 				// not interesting
 			} finally {
@@ -1445,7 +1656,7 @@ public class TestRunner implements ITestListener {
 						tableFailureList.getColumn(i).getWidth());
 			}
 
-		    // other options
+			// other options
 			ini.writeBool(CN_CONFIG_INI_SECTION, "HideTestNodesOnOpen", mntmHideTestNodesOnOpen.getSelection());
 			ini.writeBool(CN_CONFIG_INI_SECTION, "BreakOnFailures", mntmBreakOnFailures.getSelection());
 			ini.writeBool(CN_CONFIG_INI_SECTION, "FailOnNoChecksExecuted", mntmFailTestCaseIfNoChecksExecuted.getSelection());
@@ -1492,7 +1703,7 @@ public class TestRunner implements ITestListener {
 				column.setWidth(ini.readInteger(CN_CONFIG_INI_SECTION, "FailureList.ColumnWidth[" + i + "]", column.getWidth()));
 			}
 	
-		    // other options
+			// other options
 			mntmHideTestNodesOnOpen.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
 					"HideTestNodesOnOpen", mntmHideTestNodesOnOpen.getSelection()));
 			mntmBreakOnFailures.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
@@ -1726,10 +1937,10 @@ public class TestRunner implements ITestListener {
 			display.syncExec(new Runnable() {
 				@Override public void run() {
 					if (!display.isDisposed()) {
-				        MessageBox messageBox = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
-				        messageBox.setText(shell.getText());
-				        messageBox.setMessage(message);
-				        messageBox.open();
+						MessageBox messageBox = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+						messageBox.setText(shell.getText());
+						messageBox.setMessage(message);
+						messageBox.open();
 					}
 				}
 			});
@@ -1738,19 +1949,20 @@ public class TestRunner implements ITestListener {
 
 	@Override
 	public void testingStarts() {
-    	fTotalTime = 0;
-    	updateStatus(true);
-    	scoreBar.setBackground(clOk);
-    	scoreBar.update();
+		fTotalTime = 0;
+		updateStatus(true);
+		scoreBar.setBackground(clOk);
+		scoreBar.update();
 	}
 
 	@Override
 	public void startTest(Description description) {
-    	assert fTestResult != null && fNotifier != null;
-    	assert description != null;
-    	TreeItem node = testToNode(description);
-    	assert node != null;
-    	setTreeNodeImage(node, imgRunning);
+		assert fTestResult != null && fNotifier != null;
+		assert description != null;
+		fTestTimeMap.put(description, new TestTime());
+		TreeItem node = testToNode(description);
+		assert node != null;
+		setTreeNodeImage(node, imgRunning);
 		if (mntmShowTestedNode.getSelection()) {
 			makeNodeVisible(node);
 			testTree.update();
@@ -1774,6 +1986,11 @@ public class TestRunner implements ITestListener {
 
 		setTreeNodeImage(testToNode(failure.getDescription()), imgError);
 		updateStatus(false);
+
+		if (mntmBreakOnFailures.getSelection() && fTestResult != null && fNotifier != null) {
+			fNotifier.pleaseStop();
+			selectNode(testToNode(failure.getDescription()));
+		}
 	}
 
 	@Override
@@ -1785,11 +2002,14 @@ public class TestRunner implements ITestListener {
 			scoreBar.update();
 		}
 		setTreeNodeImage(testToNode(failure.getDescription()), imgFailed);
+		fAssumptionFailureCount++;
 		updateStatus(false);
 	}
 
 	@Override
 	public void endTest(Description description) {
+		if (fTestTimeMap.containsKey(description))
+			fTestTimeMap.get(description).stop();
 		updateStatus(false);
 	}
 
@@ -1814,14 +2034,16 @@ public class TestRunner implements ITestListener {
 	}
 
 	private long getElapsedTestTime(Description test) {
-		// TODO Auto-generated method stub
+		if (fTestTimeMap.containsKey(test))
+			return fTestTimeMap.get(test).getElapsed();
 		return 0;
 	}
 
 	private Description getSelectedTest() {
 		if (testTree.getSelectionCount() == 0)
 			return null;
-		return fTests.get((int) testTree.getSelection()[0].getData());
+		else
+			return nodeToTest(testTree.getSelection()[0]);
 	}
 
 	private int countEnabledTestCases(TreeItem treeItem) {

@@ -1,5 +1,6 @@
 package ru.vitkud.test;
 
+import org.eclipse.swt.widgets.Display;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assume;
@@ -44,7 +45,7 @@ public class Second {
 		System.out.println("Second.hTestSleep3s()");
 		for (int i = 0; i < 29; ++i) {
 			Thread.sleep(100L);
-			if (TestRunner.getInstance()!= null) TestRunner.getInstance().processMessages();
+			processMessages();
 		}
 	}
 
@@ -56,6 +57,10 @@ public class Second {
 	@Test
 	public void test() throws Exception {
 		System.out.println("Second.test()");
+	}
+
+	private static void processMessages() {
+		while (Display.getDefault().readAndDispatch());
 	}
 
 }

@@ -2,28 +2,32 @@ package ru.vitkud.test;
 
 import java.beans.Beans;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.lang.annotation.Annotation;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyleRange;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.ControlAdapter;
 import org.eclipse.swt.events.ControlEvent;
+import org.eclipse.swt.events.DisposeEvent;
+import org.eclipse.swt.events.DisposeListener;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
+import org.eclipse.swt.events.MenuAdapter;
+import org.eclipse.swt.events.MenuEvent;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.ShellAdapter;
@@ -67,31 +71,21 @@ public class TestRunner implements ITestListener {
 	/**
 	 * Launch the application.
 	 * @param args
-	 */	
-	public static void main(String[] args) {
-		try {
-			if (args.length == 0) {
-				System.err.println("Missing Test class name");
-				System.exit(2);
-			}
-			System.exit(runTest(Class.forName(args[0])));
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.exit(1);
+	 * @throws ClassNotFoundException
+	 */
+	public static void main(String[] args) throws Exception {
+		if (args.length == 0) {
+			System.err.println("Missing Test class name");
+			System.exit(2);
 		}
+		System.exit(runTest(Class.forName(args[0])));
 	}
 
-	private static TestRunner window = null;
-	
 	public static int runTest(Class<?> test) {
-		window = new TestRunner();
+		TestRunner window = new TestRunner();
 		window.setSuite(test);
 		window.open();
 		return window.getFailureCount();
-	}
-
-	public static TestRunner getInstance() {
-		return window;
 	}
 
 	private static final String TEST_INI_FILE = "junit-gui.properties";
@@ -142,7 +136,17 @@ public class TestRunner implements ITestListener {
 	private Label lblProgressPercent;
 	private Composite compositeErrorBox;
 	private StyledText errorMessageStyledText;
-	
+	private MenuItem pmntmSelectCurrent;
+	private MenuItem pmntmDeselectCurrent;
+	private MenuItem pmntmSelectFailed;
+	private MenuItem pmntmSelectAll;
+	private MenuItem pmntmDeselectAll;
+	private MenuItem pmntmHideTestNodes;
+	private MenuItem pmntmExpandAll;
+	private MenuItem pmntmCopyTestnameToClipboard;
+	private MenuItem pmntmRunSelectedTest;
+	private MenuItem pmntmCopyErrorMessageToClipboard;
+
 	// Color constants for the progress bar and failure details panel
 	private Color clOk;// = Display.getCurrent().getSystemColor(SWT.COLOR_GREEN);
 	private Color clFailure;// = Display.getCurrent().getSystemColor(SWT.COLOR_MAGENTA);
@@ -155,7 +159,7 @@ public class TestRunner implements ITestListener {
 	private Image imgHasProps;
 	private Image imgFailed;
 	private Image imgError;
-	private Map<Image, Integer>	indexesImages; 
+	private Map<Image, Integer>	indexesImages;
 
 	public TestRunner() {
 		display = Display.getDefault();
@@ -173,8 +177,14 @@ public class TestRunner implements ITestListener {
 		shell.open();
 		shell.layout();
 		while (!shell.isDisposed()) {
-			if (!display.readAndDispatch()) {
-				display.sleep();
+			try {
+				if (!display.readAndDispatch()) {
+					display.sleep();
+				}
+			} catch (Exception e) {
+				if (shell.isDisposed())
+					throw e;
+				showError(null, e);
 			}
 		}
 	}
@@ -203,7 +213,7 @@ public class TestRunner implements ITestListener {
 		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
 		mntmReportMemoryLeakTypeOnShutdown.setSelection(false);
 		mntmReportMemoryLeakTypeOnShutdown.setEnabled(false);
-		
+
 		if (!mntmFailTestCaseIfMemoryLeaked.isEnabled())
 			mntmFailTestCaseIfMemoryLeaked.setSelection(false);
 		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(mntmFailTestCaseIfMemoryLeaked.getSelection());
@@ -216,11 +226,12 @@ public class TestRunner implements ITestListener {
 	}
 
 	private void formDestroy() {
-		// TODO ...
+		clearResult();
 		autoSaveConfiguration();
-		// TODO ...
+		fSuite = null;
+		fTests = null;
 	}
-	
+
 	private void formShow() {
 		setupGuiNodes();
 	}
@@ -235,8 +246,10 @@ public class TestRunner implements ITestListener {
 			public void shellActivated(ShellEvent e) {
 				formShow();
 			}
+		});
+		shell.addDisposeListener(new DisposeListener() {
 			@Override
-			public void shellClosed(ShellEvent e) {
+			public void widgetDisposed(DisposeEvent e) {
 				formDestroy();
 			}
 		});
@@ -249,16 +262,16 @@ public class TestRunner implements ITestListener {
 		fl_shell.marginLeft = 4;
 		shell.setLayout(fl_shell);
 
-		Menu menu = new Menu(shell, SWT.BAR);
-		shell.setMenuBar(menu);
+		Menu mainMenu = new Menu(shell, SWT.BAR);
+		shell.setMenuBar(mainMenu);
 
-		MenuItem mntmNewSubmenu = new MenuItem(menu, SWT.CASCADE);
-		mntmNewSubmenu.setText("&File");
+		MenuItem mntmFile = new MenuItem(mainMenu, SWT.CASCADE);
+		mntmFile.setText("&File");
 
-		Menu menu_1 = new Menu(mntmNewSubmenu);
-		mntmNewSubmenu.setMenu(menu_1);
+		Menu fileMenu = new Menu(mntmFile);
+		mntmFile.setMenu(fileMenu);
 
-		MenuItem mntmSaveConfiguration = new MenuItem(menu_1, SWT.NONE);
+		MenuItem mntmSaveConfiguration = new MenuItem(fileMenu, SWT.NONE);
 		mntmSaveConfiguration.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -268,7 +281,7 @@ public class TestRunner implements ITestListener {
 		mntmSaveConfiguration.setAccelerator(SWT.CTRL | 'S');
 		mntmSaveConfiguration.setText("&Save Configuration" + "\tCtrl+S");
 
-		MenuItem mntmRestoreSavedConfiguration = new MenuItem(menu_1, SWT.NONE);
+		MenuItem mntmRestoreSavedConfiguration = new MenuItem(fileMenu, SWT.NONE);
 		mntmRestoreSavedConfiguration.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -278,7 +291,7 @@ public class TestRunner implements ITestListener {
 		});
 		mntmRestoreSavedConfiguration.setText("&Restore Saved Configuration");
 
-		MenuItem mntmExit = new MenuItem(menu_1, SWT.NONE);
+		MenuItem mntmExit = new MenuItem(fileMenu, SWT.NONE);
 		mntmExit.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -290,14 +303,14 @@ public class TestRunner implements ITestListener {
 		mntmExit.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/6.png"));
 		mntmExit.setAccelerator(SWT.ALT | 'X');
 		mntmExit.setText("E&xit" + "\tAlt+X");
-		
-		MenuItem mntmTestTree = new MenuItem(menu, SWT.CASCADE);
+
+		MenuItem mntmTestTree = new MenuItem(mainMenu, SWT.CASCADE);
 		mntmTestTree.setText("Test &Tree");
-		
-		Menu menu_2 = new Menu(mntmTestTree);
-		mntmTestTree.setMenu(menu_2);
-		
-		mntmSelectAll = new MenuItem(menu_2, SWT.NONE);
+
+		Menu testTreeMenu = new Menu(mntmTestTree);
+		mntmTestTree.setMenu(testTreeMenu);
+
+		mntmSelectAll = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmSelectAll.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -307,8 +320,8 @@ public class TestRunner implements ITestListener {
 		mntmSelectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
 		mntmSelectAll.setAccelerator(SWT.CTRL | SWT.ALT | 'A');
 		mntmSelectAll.setText("Select &All" + "\tCtrl+Alt+A");
-		
-		mntmDeselectAll = new MenuItem(menu_2, SWT.NONE);
+
+		mntmDeselectAll = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmDeselectAll.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -318,8 +331,8 @@ public class TestRunner implements ITestListener {
 		mntmDeselectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
 		mntmDeselectAll.setAccelerator(SWT.CTRL | SWT.DEL);
 		mntmDeselectAll.setText("&Deselect All" + "\tCtrl+Del");
-		
-		mntmSelectFailed = new MenuItem(menu_2, SWT.NONE);
+
+		mntmSelectFailed = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmSelectFailed.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -329,8 +342,8 @@ public class TestRunner implements ITestListener {
 		mntmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		mntmSelectFailed.setAccelerator(SWT.CTRL | 'F');
 		mntmSelectFailed.setText("Select Fai&led" + "\tCtrl+F");
-		
-		mntmSelectCurrent = new MenuItem(menu_2, SWT.NONE);
+
+		mntmSelectCurrent = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmSelectCurrent.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -340,8 +353,8 @@ public class TestRunner implements ITestListener {
 		mntmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		mntmSelectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | 'A');
 		mntmSelectCurrent.setText("Select &Current" + "\tShift+Ctrl+A");
-		
-		mntmDeselectCurrent = new MenuItem(menu_2, SWT.NONE);
+
+		mntmDeselectCurrent = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmDeselectCurrent.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -351,10 +364,10 @@ public class TestRunner implements ITestListener {
 		mntmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		mntmDeselectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | SWT.DEL);
 		mntmDeselectCurrent.setText("Deselect C&urrent" + "\tShift+Ctrl+Del");
-		
-		new MenuItem(menu_2, SWT.SEPARATOR);
-		
-		mntmHideTestNodes = new MenuItem(menu_2, SWT.NONE);
+
+		new MenuItem(testTreeMenu, SWT.SEPARATOR);
+
+		mntmHideTestNodes = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmHideTestNodes.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -363,8 +376,8 @@ public class TestRunner implements ITestListener {
 		});
 		mntmHideTestNodes.setAccelerator(SWT.CTRL | 'H');
 		mntmHideTestNodes.setText("&Hide Test Nodes" + "\tCtrl+H");
-		
-		mntmExpandAll = new MenuItem(menu_2, SWT.NONE);
+
+		mntmExpandAll = new MenuItem(testTreeMenu, SWT.NONE);
 		mntmExpandAll.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -373,93 +386,130 @@ public class TestRunner implements ITestListener {
 		});
 		mntmExpandAll.setAccelerator(SWT.CTRL | 'P');
 		mntmExpandAll.setText("Ex&pand All" + "\tCtrl+P");
-		
-		new MenuItem(menu_2, SWT.SEPARATOR);
 
-		MenuItem mntmGoToNextSelectedNode = new MenuItem(menu_2, SWT.NONE);
-		mntmGoToNextSelectedNode.setAccelerator(SWT.CTRL | SWT.RIGHT);
+		new MenuItem(testTreeMenu, SWT.SEPARATOR);
+
+		MenuItem mntmGoToNextSelectedNode = new MenuItem(testTreeMenu, SWT.NONE);
+		mntmGoToNextSelectedNode.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				goToNextSelectedTestActionExecute();
+			}
+		});
+		mntmGoToNextSelectedNode.setAccelerator(SWT.CTRL | SWT.ARROW_RIGHT);
 		mntmGoToNextSelectedNode.setText("Go To Next Selected Test" + "\tCtrl+Right");
-		
-		MenuItem mntmGoToPreviousSelectedNode = new MenuItem(menu_2, SWT.NONE);
-		mntmGoToPreviousSelectedNode.setAccelerator(SWT.CTRL | SWT.LEFT);
-		mntmGoToPreviousSelectedNode.setText("Go To Previous Selected Test" + "\tCtrl+Left");
-		
-		new MenuItem(menu_2, SWT.SEPARATOR);
 
-		mntmCopyTestnameToClipboard = new MenuItem(menu_2, SWT.NONE);
+		MenuItem mntmGoToPreviousSelectedNode = new MenuItem(testTreeMenu, SWT.NONE);
+		mntmGoToPreviousSelectedNode.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				goToPrevSelectedTestActionExecute();
+			}
+		});
+		mntmGoToPreviousSelectedNode.setAccelerator(SWT.CTRL | SWT.ARROW_LEFT);
+		mntmGoToPreviousSelectedNode.setText("Go To Previous Selected Test" + "\tCtrl+Left");
+
+		new MenuItem(testTreeMenu, SWT.SEPARATOR);
+
+		mntmCopyTestnameToClipboard = new MenuItem(testTreeMenu, SWT.NONE);
+		mntmCopyTestnameToClipboard.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				copyTestnameToClipboardActionExecute();
+			}
+		});
 		mntmCopyTestnameToClipboard.setAccelerator(SWT.CTRL | SWT.ALT | 'C');
 		mntmCopyTestnameToClipboard.setText("Copy testname to clipboard" + "\tCtrl+Alt+C");
-		
-		new MenuItem(menu_2, SWT.SEPARATOR);
 
-		mntmRunSelectedTest = new MenuItem(menu_2, SWT.NONE);
+		new MenuItem(testTreeMenu, SWT.SEPARATOR);
+
+		mntmRunSelectedTest = new MenuItem(testTreeMenu, SWT.NONE);
+		mntmRunSelectedTest.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				runSelectedTestActionExecute();
+			}
+		});
 		mntmRunSelectedTest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
 		mntmRunSelectedTest.setAccelerator(SWT.F8);
 		mntmRunSelectedTest.setText("Run selected test" + "\tF8");
-		
-		MenuItem mntmOptions = new MenuItem(menu, SWT.CASCADE);
+
+		MenuItem mntmOptions = new MenuItem(mainMenu, SWT.CASCADE);
 		mntmOptions.setText("&Options");
-		
-		Menu menu_3 = new Menu(mntmOptions);
-		mntmOptions.setMenu(menu_3);
-		
-		mntmAutoSave = new MenuItem(menu_3, SWT.CHECK);
+
+		Menu optionsMenu = new Menu(mntmOptions);
+		mntmOptions.setMenu(optionsMenu);
+
+		mntmAutoSave = new MenuItem(optionsMenu, SWT.CHECK);
+		mntmAutoSave.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				autoSaveConfiguration();
+			}
+		});
 		mntmAutoSave.setSelection(true);
 		mntmAutoSave.setText("&Auto Save Configuration");
-		
-		mntmErrorBoxVisible = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmErrorBoxVisible = new MenuItem(optionsMenu, SWT.CHECK);
+		mntmErrorBoxVisible.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				compositeErrorBox.setVisible(mntmErrorBoxVisible.getSelection());
+				shell.layout(true, true);
+			}
+		});
 		mntmErrorBoxVisible.setSelection(true);
 		mntmErrorBoxVisible.setText("&Error Box Visible");
-		
-		MenuItem mntmAutoChangeFocus = new MenuItem(menu_3, SWT.CHECK);
+
+		MenuItem mntmAutoChangeFocus = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmAutoChangeFocus.setSelection(true);
 		mntmAutoChangeFocus.setText("Auto Change &Focus");
-		
-		mntmHideTestNodesOnOpen = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmHideTestNodesOnOpen = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmHideTestNodesOnOpen.setText("&Hide Test Nodes On Open");
-		
-		mntmShowTestedNode = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmShowTestedNode = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmShowTestedNode.setSelection(true);
 		mntmShowTestedNode.setText("&Show Tested Node");
-		
-		mntmBreakOnFailures = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmBreakOnFailures = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmBreakOnFailures.setText("&Break on Failures");
-		
-		mntmUseRegistry = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmUseRegistry = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmUseRegistry.setText("Use Registry");
-		
-		new MenuItem(menu_3, SWT.SEPARATOR);
 
-		MenuItem mntmShowTestCasesWithRunTimeProperties = new MenuItem(menu_3, SWT.CHECK);
+		new MenuItem(optionsMenu, SWT.SEPARATOR);
+
+		MenuItem mntmShowTestCasesWithRunTimeProperties = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmShowTestCasesWithRunTimeProperties.setText("Show TestCases with RunTime Properties");
-		
-		mntmWarnIfFailTestOverridden = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmWarnIfFailTestOverridden = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmWarnIfFailTestOverridden.setText("Warn if Fail Test Overridden");
-		
-		new MenuItem(menu_3, SWT.SEPARATOR);
 
-		mntmFailTestCaseIfNoChecksExecuted = new MenuItem(menu_3, SWT.CHECK);
+		new MenuItem(optionsMenu, SWT.SEPARATOR);
+
+		mntmFailTestCaseIfNoChecksExecuted = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmFailTestCaseIfNoChecksExecuted.setText("Fail TestCase if no checks executed");
-		
-		new MenuItem(menu_3, SWT.SEPARATOR);
 
-		mntmReportMemoryLeakTypeOnShutdown = new MenuItem(menu_3, SWT.CHECK);
+		new MenuItem(optionsMenu, SWT.SEPARATOR);
+
+		mntmReportMemoryLeakTypeOnShutdown = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmReportMemoryLeakTypeOnShutdown.setText("Report memory leak type on Shutdown");
-		
-		mntmFailTestCaseIfMemoryLeaked = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmFailTestCaseIfMemoryLeaked = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmFailTestCaseIfMemoryLeaked.setText("Fail TestCase if memory leaked");
-		
-		mntmIgnoreMemoryLeakInSetUpTearDown = new MenuItem(menu_3, SWT.CHECK);
+
+		mntmIgnoreMemoryLeakInSetUpTearDown = new MenuItem(optionsMenu, SWT.CHECK);
 		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(false);
 		mntmIgnoreMemoryLeakInSetUpTearDown.setText("Ignore memory leak in SetUp/TearDown");
-		
-		MenuItem mntmActions = new MenuItem(menu, SWT.CASCADE);
+
+		MenuItem mntmActions = new MenuItem(mainMenu, SWT.CASCADE);
 		mntmActions.setText("Actio&ns");
-		
-		Menu menu_4 = new Menu(mntmActions);
-		mntmActions.setMenu(menu_4);
-		
-		mntmRun = new MenuItem(menu_4, SWT.NONE);
+
+		Menu actionsMenu = new Menu(mntmActions);
+		mntmActions.setMenu(actionsMenu);
+
+		mntmRun = new MenuItem(actionsMenu, SWT.NONE);
 		mntmRun.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -469,13 +519,19 @@ public class TestRunner implements ITestListener {
 		mntmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
 		mntmRun.setAccelerator(SWT.F9);
 		mntmRun.setText("Run" + "\tF9");
-		
-		mntmRunSelectedTest2 = new MenuItem(menu_4, SWT.NONE);
+
+		mntmRunSelectedTest2 = new MenuItem(actionsMenu, SWT.NONE);
+		mntmRunSelectedTest2.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				runSelectedTestActionExecute();
+			}
+		});
 		mntmRunSelectedTest2.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
 		mntmRunSelectedTest2.setAccelerator(SWT.F8);
 		mntmRunSelectedTest2.setText("Run selected test" + "\tF8");
-		
-		mntmStop = new MenuItem(menu_4, SWT.NONE);
+
+		mntmStop = new MenuItem(actionsMenu, SWT.NONE);
 		mntmStop.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -485,25 +541,31 @@ public class TestRunner implements ITestListener {
 		mntmStop.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/8.png"));
 		mntmStop.setAccelerator(SWT.CTRL | SWT.F2);
 		mntmStop.setText("&Stop" + "\tCtrl+F2");
-		
-		mntmCopyErrorMessageToClipboard = new MenuItem(menu_4, SWT.NONE);
+
+		mntmCopyErrorMessageToClipboard = new MenuItem(actionsMenu, SWT.NONE);
+		mntmCopyErrorMessageToClipboard.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				copyMessageToClipboardActionExecute();
+			}
+		});
 		mntmCopyErrorMessageToClipboard.setEnabled(false);
 		mntmCopyErrorMessageToClipboard.setAccelerator(SWT.SHIFT | SWT.CTRL | 'C');
 		mntmCopyErrorMessageToClipboard.setText("&Copy Error Message to Clipboard" + "\tShift+Ctrl+C");
-		
+
 		Label menuSeparator = new Label(shell, SWT.SEPARATOR | SWT.HORIZONTAL);
 		FormData fd_menuSeparator = new FormData();
 		fd_menuSeparator.right = new FormAttachment(100);
 		fd_menuSeparator.left = new FormAttachment(0);
 		menuSeparator.setLayoutData(fd_menuSeparator);
-		
-		toolBar = new ToolBar(shell, SWT.FLAT | SWT.RIGHT);
+
+		toolBar = new ToolBar(shell, SWT.FLAT | SWT.RIGHT | SWT.NO_FOCUS);
 		FormData fd_toolBar = new FormData();
 		fd_toolBar.top = new FormAttachment(menuSeparator);
 		fd_toolBar.right = new FormAttachment(100);
 		fd_toolBar.left = new FormAttachment(0);
 		toolBar.setLayoutData(fd_toolBar);
-		
+
 		tltmSelectAll = new ToolItem(toolBar, SWT.NONE);
 		tltmSelectAll.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -513,7 +575,7 @@ public class TestRunner implements ITestListener {
 		});
 		tltmSelectAll.setToolTipText("Select all tests");
 		tltmSelectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/0.png"));
-		
+
 		tltmDeselectAll = new ToolItem(toolBar, SWT.NONE);
 		tltmDeselectAll.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -523,9 +585,9 @@ public class TestRunner implements ITestListener {
 		});
 		tltmDeselectAll.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/1.png"));
 		tltmDeselectAll.setToolTipText("Deselect all tests");
-		
+
 		new ToolItem(toolBar, SWT.SEPARATOR);
-		
+
 		tltmSelectFailed = new ToolItem(toolBar, SWT.NONE);
 		tltmSelectFailed.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -535,9 +597,9 @@ public class TestRunner implements ITestListener {
 		});
 		tltmSelectFailed.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/4.png"));
 		tltmSelectFailed.setToolTipText("Select all failed tests");
-		
+
 		new ToolItem(toolBar, SWT.SEPARATOR);
-		
+
 		tltmSelectCurrent = new ToolItem(toolBar, SWT.NONE);
 		tltmSelectCurrent.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -547,7 +609,7 @@ public class TestRunner implements ITestListener {
 		});
 		tltmSelectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/2.png"));
 		tltmSelectCurrent.setToolTipText("Select current test");
-		
+
 		tltmDeselectCurrent = new ToolItem(toolBar, SWT.NONE);
 		tltmDeselectCurrent.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -557,9 +619,9 @@ public class TestRunner implements ITestListener {
 		});
 		tltmDeselectCurrent.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/3.png"));
 		tltmDeselectCurrent.setToolTipText("Deselect current test");
-		
+
 		new ToolItem(toolBar, SWT.SEPARATOR);
-		
+
 		tltmRun = new ToolItem(toolBar, SWT.NONE);
 		tltmRun.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -569,11 +631,17 @@ public class TestRunner implements ITestListener {
 		});
 		tltmRun.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/7.png"));
 		tltmRun.setToolTipText("Run selected tests");
-		
+
 		tltmRunselectedtest = new ToolItem(toolBar, SWT.NONE);
+		tltmRunselectedtest.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				runSelectedTestActionExecute();
+			}
+		});
 		tltmRunselectedtest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/actions/10.png"));
 		tltmRunselectedtest.setToolTipText("Run current test");
-		
+
 		tltmStop = new ToolItem(toolBar, SWT.NONE);
 		tltmStop.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -598,10 +666,10 @@ public class TestRunner implements ITestListener {
 		fd_sashForm.bottom = new FormAttachment(100);
 		fd_sashForm.left = new FormAttachment(0);
 		sashForm.setLayoutData(fd_sashForm);
-		
+
 		Composite compositeTree = new Composite(sashForm, SWT.NONE);
 		compositeTree.setLayout(new FormLayout());
-		
+
 		Label lblTestHierarchy = new Label(compositeTree, SWT.NONE);
 		FormData fd_lblTestHierarchy = new FormData();
 		fd_lblTestHierarchy.right = new FormAttachment(100);
@@ -609,7 +677,7 @@ public class TestRunner implements ITestListener {
 		fd_lblTestHierarchy.left = new FormAttachment(0);
 		lblTestHierarchy.setLayoutData(fd_lblTestHierarchy);
 		lblTestHierarchy.setText("Test Hi&erarchy:");
-		
+
 		testTree = new Tree(compositeTree, SWT.BORDER | SWT.CHECK);
 		testTree.addKeyListener(new KeyAdapter() {
 			@Override
@@ -641,31 +709,178 @@ public class TestRunner implements ITestListener {
 		fd_testTree.bottom = new FormAttachment(100, -3);
 		fd_testTree.right = new FormAttachment(100);
 		testTree.setLayoutData(fd_testTree);
-		
+
 		TreeItem trtmTest = new TreeItem(testTree, SWT.NONE);
 		trtmTest.setChecked(true);
 		trtmTest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
 		trtmTest.setText("Test1");
-		
+
 		TreeItem trtmSubtest = new TreeItem(trtmTest, SWT.NONE);
 		trtmSubtest.setChecked(true);
 		trtmSubtest.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
 		trtmSubtest.setText("SubTest");
-		
+
 		TreeItem trtmSubtest_1 = new TreeItem(trtmTest, SWT.NONE);
 		trtmSubtest_1.setChecked(true);
 		trtmSubtest_1.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
 		trtmSubtest_1.setText("SubTest1.2");
 		trtmTest.setExpanded(true);
-		
+
 		TreeItem trtmTest_1 = new TreeItem(testTree, SWT.NONE);
 		trtmTest_1.setChecked(true);
 		trtmTest_1.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/run/0.png"));
 		trtmTest_1.setText("Test2");
-		
+
+		Menu testTreePopupMenu = new Menu(testTree);
+		testTreePopupMenu.addMenuListener(new MenuAdapter() {
+			@Override
+			public void menuShown(MenuEvent e) {
+				if (testTree.getSelectionCount() > 0) {
+					TreeItem node = testTree.getSelection()[0];
+					Description test = nodeToTest(node);
+					mntmTestCaseProperties.setEnabled(test.isTest());
+				}
+			}
+		});
+		testTree.setMenu(testTreePopupMenu);
+
+		mntmTestCaseProperties = new MenuItem(testTreePopupMenu, SWT.NONE);
+		mntmTestCaseProperties.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				testCasePropertiesActionExecute();
+			}
+		});
+		mntmTestCaseProperties.setAccelerator(SWT.SHIFT | SWT.CTRL | 'T');
+		mntmTestCaseProperties.setText("TestCase Properties" + "\tShift+Ctrl+T");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmSelectCurrent = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmSelectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectCurrentActionExecute();
+			}
+		});
+		pmntmSelectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | 'A');
+		pmntmSelectCurrent.setText("Select &Current" + "\tShift+Ctrl+A");
+
+		pmntmDeselectCurrent = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmDeselectCurrent.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				deselectCurrentActionExecute();
+			}
+		});
+		pmntmDeselectCurrent.setAccelerator(SWT.SHIFT | SWT.CTRL | SWT.DEL);
+		pmntmDeselectCurrent.setText("Deselect C&urrent" + "\tShift+Ctrl+Del");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmSelectFailed = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmSelectFailed.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectFailedActionExecute();
+			}
+		});
+		pmntmSelectFailed.setAccelerator(SWT.CTRL | 'F');
+		pmntmSelectFailed.setText("Select Fai&led" + "\tCtrl+F");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmSelectAll = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmSelectAll.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				selectAllActionExecute();
+			}
+		});
+		pmntmSelectAll.setAccelerator(SWT.CTRL | SWT.ALT | 'A');
+		pmntmSelectAll.setText("Select &All" + "\tCtrl+Alt+A");
+
+		pmntmDeselectAll = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmDeselectAll.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				deselectAllActionExecute();
+			}
+		});
+		pmntmDeselectAll.setAccelerator(SWT.CTRL | SWT.DEL);
+		pmntmDeselectAll.setText("&Deselect All" + "\tCtrl+Del");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmHideTestNodes = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmHideTestNodes.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				hideTestNodesActionExecute();
+			}
+		});
+		pmntmHideTestNodes.setAccelerator(SWT.CTRL | 'H');
+		pmntmHideTestNodes.setText("&Hide Test Nodes" + "\tCtrl+H");
+
+		pmntmExpandAll = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmExpandAll.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				expandAllNodesActionExecute();
+			}
+		});
+		pmntmExpandAll.setAccelerator(SWT.CTRL | 'P');
+		pmntmExpandAll.setText("Ex&pand All" + "\tCtrl+P");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		MenuItem pmntmGoToNextSelectedNode = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmGoToNextSelectedNode.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				goToNextSelectedTestActionExecute();
+			}
+		});
+		pmntmGoToNextSelectedNode.setAccelerator(SWT.CTRL | SWT.ARROW_RIGHT);
+		pmntmGoToNextSelectedNode.setText("Go To Next Selected Test" + "\tCtrl+Right");
+
+		MenuItem pmntmGoToPreviousSelectedNode = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmGoToPreviousSelectedNode.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				goToPrevSelectedTestActionExecute();
+			}
+		});
+		pmntmGoToPreviousSelectedNode.setAccelerator(SWT.CTRL | SWT.ARROW_LEFT);
+		pmntmGoToPreviousSelectedNode.setText("Go To Previous Selected Test" + "\tCtrl+Left");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmCopyTestnameToClipboard = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmCopyTestnameToClipboard.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				copyTestnameToClipboardActionExecute();
+			}
+		});
+		pmntmCopyTestnameToClipboard.setAccelerator(SWT.CTRL | SWT.ALT | 'C');
+		pmntmCopyTestnameToClipboard.setText("Copy testname to clipboard" + "\tCtrl+Alt+C");
+
+		new MenuItem(testTreePopupMenu, SWT.SEPARATOR);
+
+		pmntmRunSelectedTest = new MenuItem(testTreePopupMenu, SWT.NONE);
+		pmntmRunSelectedTest.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				runSelectedTestActionExecute();
+			}
+		});
+		pmntmRunSelectedTest.setAccelerator(SWT.F8);
+		pmntmRunSelectedTest.setText("Run selected test" + "\tF8");
+
 		compositeResults = new Composite(sashForm, SWT.NONE);
 		compositeResults.setLayout(new FormLayout());
-		
+
 		Composite compositeProgressAndScore = new Composite(compositeResults, SWT.BORDER);
 		compositeProgressAndScore.setToolTipText("");
 		compositeProgressAndScore.setLayout(new FormLayout());
@@ -675,7 +890,7 @@ public class TestRunner implements ITestListener {
 		fd_compositeProgressAndScore.top = new FormAttachment(0, 3);
 		fd_compositeProgressAndScore.left = new FormAttachment(0);
 		compositeProgressAndScore.setLayoutData(fd_compositeProgressAndScore);
-		
+
 		Label lblProgress = new Label(compositeProgressAndScore, SWT.RIGHT);
 		FormData fd_lblProgress = new FormData();
 		fd_lblProgress.right = new FormAttachment(0, 59);
@@ -683,7 +898,7 @@ public class TestRunner implements ITestListener {
 		fd_lblProgress.left = new FormAttachment(0, 10);
 		lblProgress.setLayoutData(fd_lblProgress);
 		lblProgress.setText("Progress:");
-		
+
 		progressBar = new ProgressBar(compositeProgressAndScore, SWT.NONE);
 		progressBar.setToolTipText("Shows the proportion of tests run");
 		FormData fd_progressBar = new FormData();
@@ -692,7 +907,7 @@ public class TestRunner implements ITestListener {
 		fd_progressBar.left = new FormAttachment(lblProgress, 6);
 		fd_progressBar.right = new FormAttachment(100, -6);
 		progressBar.setLayoutData(fd_progressBar);
-		
+
 		Label lblScore = new Label(compositeProgressAndScore, SWT.RIGHT);
 		FormData fd_lblScore = new FormData();
 		fd_lblScore.right = new FormAttachment(lblProgress, 0, SWT.RIGHT);
@@ -700,7 +915,7 @@ public class TestRunner implements ITestListener {
 		fd_lblScore.left = new FormAttachment(lblProgress, 0, SWT.LEFT);
 		lblScore.setLayoutData(fd_lblScore);
 		lblScore.setText("Score:");
-		
+
 		scoreBar = new ProgressBar(compositeProgressAndScore, SWT.BORDER);
 		scoreBar.setToolTipText("Shows the proportion of successful tests");
 		FormData fd_scoreBar = new FormData();
@@ -709,7 +924,7 @@ public class TestRunner implements ITestListener {
 		fd_scoreBar.top = new FormAttachment(progressBar, 6);
 		fd_scoreBar.left = new FormAttachment(progressBar, 0, SWT.LEFT);
 		scoreBar.setLayoutData(fd_scoreBar);
-		
+
 		lblProgressPercent = new Label(compositeProgressAndScore, SWT.RIGHT);
 		FormData fd_lblProgressPercent = new FormData();
 		fd_lblProgressPercent.top = new FormAttachment(lblScore, 0, SWT.TOP);
@@ -717,8 +932,8 @@ public class TestRunner implements ITestListener {
 		fd_lblProgressPercent.right = new FormAttachment(100, -6);
 		lblProgressPercent.setLayoutData(fd_lblProgressPercent);
 		lblProgressPercent.setText("Progress");
-		
-		tableResults = new Table(compositeResults, SWT.BORDER | SWT.FULL_SELECTION | SWT.HIDE_SELECTION);
+
+		tableResults = new Table(compositeResults, SWT.BORDER | SWT.HIDE_SELECTION);
 		tableResults.setToolTipText("Shows statistics about the current/last run");
 		FormData fd_tableResults = new FormData();
 		fd_tableResults.height = 16;
@@ -727,38 +942,38 @@ public class TestRunner implements ITestListener {
 		fd_tableResults.left = new FormAttachment(0, 0);
 		tableResults.setLayoutData(fd_tableResults);
 		tableResults.setHeaderVisible(true);
-		
+
 		TableColumn tableColumn = new TableColumn(tableResults, SWT.NONE);
 		tableColumn.setWidth(8);
-		
+
 		TableColumn tblclmnTests = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnTests.setWidth(64);
 		tblclmnTests.setText("Tests");
-		
+
 		TableColumn tblclmnRun = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnRun.setWidth(64);
 		tblclmnRun.setText("Run");
-		
+
 		TableColumn tblclmnFailures = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnFailures.setWidth(64);
 		tblclmnFailures.setText("Failures");
-		
+
 		TableColumn tblclmnSkipped = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnSkipped.setWidth(64);
 		tblclmnSkipped.setText("Skipped");
-		
+
 		TableColumn tblclmnIgnored = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnIgnored.setWidth(64);
 		tblclmnIgnored.setText("Ignored");
-		
+
 		TableColumn tblclmnTestTime = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnTestTime.setWidth(76);
 		tblclmnTestTime.setText("Test Time");
-		
+
 		TableColumn tblclmnTotalTime = new TableColumn(tableResults, SWT.RIGHT);
 		tblclmnTotalTime.setWidth(76);
 		tblclmnTotalTime.setText("Total Time");
-		
+
 		TableItem tableItem = new TableItem(tableResults, SWT.NONE);
 		tableItem.setText(new String[] {"", "1", "2", "3", "4", "5", "6", "7"});
 
@@ -799,26 +1014,26 @@ public class TestRunner implements ITestListener {
 		fd_tableFailureList.top = new FormAttachment(tableResults, 3);
 		tableFailureList.setLayoutData(fd_tableFailureList);
 		tableFailureList.setHeaderVisible(true);
-		
+
 		TableColumn tblclmnTestName = new TableColumn(tableFailureList, SWT.NONE);
 		tblclmnTestName.setWidth(120);
 		tblclmnTestName.setText("Test Name");
-		
+
 		TableColumn tblclmnFailureType = new TableColumn(tableFailureList, SWT.NONE);
 		tblclmnFailureType.setWidth(100);
 		tblclmnFailureType.setText("Failure Type");
-		
+
 		TableColumn tblclmnMessage = new TableColumn(tableFailureList, SWT.NONE);
 		tblclmnMessage.setWidth(200);
 		tblclmnMessage.setText("Message");
-		
+
 		TableColumn tblclmnLocation = new TableColumn(tableFailureList, SWT.NONE);
 		tblclmnLocation.setWidth(60);
 		tblclmnLocation.setText("Location");
-		
+
 		compositeErrorBox = new Composite(sashForm, SWT.NONE);
 		compositeErrorBox.setLayout(new FormLayout());
-		
+
 		errorMessageStyledText = new StyledText(compositeErrorBox, SWT.BORDER | SWT.V_SCROLL | SWT.WRAP);
 		errorMessageStyledText.setEditable(false);
 		errorMessageStyledText.setAlwaysShowScrollBars(false);
@@ -829,8 +1044,22 @@ public class TestRunner implements ITestListener {
 		fd_errorMessageStyledText.top = new FormAttachment(0, 3);
 		fd_errorMessageStyledText.left = new FormAttachment(0);
 		errorMessageStyledText.setLayoutData(fd_errorMessageStyledText);
-		sashForm.setWeights(new int[] {200, 150, 50});
 
+		Menu errorMessagePopupMenu = new Menu(errorMessageStyledText);
+		errorMessageStyledText.setMenu(errorMessagePopupMenu);
+
+		pmntmCopyErrorMessageToClipboard = new MenuItem(errorMessagePopupMenu, SWT.NONE);
+		pmntmCopyErrorMessageToClipboard.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				copyMessageToClipboardActionExecute();
+			}
+		});
+		pmntmCopyErrorMessageToClipboard.setEnabled(false);
+		pmntmCopyErrorMessageToClipboard.setAccelerator(SWT.SHIFT | SWT.CTRL | 'C');
+		pmntmCopyErrorMessageToClipboard.setText("&Copy Error Message to Clipboard" + "\tShift+Ctrl+C");
+
+		sashForm.setWeights(new int[] {200, 150, 50});
 	}
 
 	void selectAllActionExecute() {
@@ -878,16 +1107,26 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private List<TreeItem> getAllTestTreeItems() {
-		List<TreeItem> result = new ArrayList<>(Arrays.asList(testTree.getItems()));
-		for (int i = 0; i < result.size(); ++i) {
-			Collections.addAll(result, result.get(i).getItems());
+	private List<TreeItem> getAllTestTreeItemsOrderly() {
+		List<TreeItem> result = new ArrayList<>();
+		for (TreeItem node : testTree.getItems()) {
+			result.add(node);
+			result.addAll(getAllTestTreeItemsOrderly(node));
+		}
+		return result;
+	}
+
+	private List<TreeItem> getAllTestTreeItemsOrderly(TreeItem node) {
+		List<TreeItem> result = new ArrayList<>();
+		for (TreeItem childNode : node.getItems()) {
+			result.add(childNode);
+			result.addAll(getAllTestTreeItemsOrderly(childNode));
 		}
 		return result;
 	}
 
 	private void fullExpandTestTree() {
-		for (TreeItem node: getAllTestTreeItems())
+		for (TreeItem node: getAllTestTreeItemsOrderly())
 			node.setExpanded(true);
 	}
 
@@ -931,9 +1170,15 @@ public class TestRunner implements ITestListener {
 		tltmRun.setEnabled(enabled);
 	}
 
+	private void copyMessageToClipboardActionExecute() {
+		errorMessageStyledText.selectAll();
+		errorMessageStyledText.copy();
+	}
+
 	private void copyMessageToClipboardActionUpdate() {
 		boolean enabled = tableFailureList.getSelectionIndex() != -1;
 		mntmCopyErrorMessageToClipboard.setEnabled(enabled);
+		pmntmCopyErrorMessageToClipboard.setEnabled(enabled);
 	}
 
 	private void stopActionExecute() {
@@ -966,18 +1211,113 @@ public class TestRunner implements ITestListener {
 		runSelectedTestActionUpdate();
 	}
 
+	private void copyTestnameToClipboardActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			Clipboard clipboard = new Clipboard(Display.getCurrent());
+			clipboard.setContents(new Object[] { testTree.getSelection()[0].getText() },
+					new Transfer[] { TextTransfer.getInstance() });
+			clipboard.dispose();
+		}
+	}
+
 	private void copyTestnameToClipboardActionUpdate() {
-		Description selectedTest = getSelectedTest();
+		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmCopyTestnameToClipboard.setEnabled(enabled);
+		pmntmCopyTestnameToClipboard.setEnabled(enabled);
+	}
+
+	private void runSelectedTestActionExecute() {
+		setup();
+		listSelectedTests();
+		progressBar.setMaximum(1);
+		scoreBar.setMaximum(1);
+		runTheTest();
+		fSelectedTests = null;
 	}
 
 	private void runSelectedTestActionUpdate() {
-		Description selectedTest = getSelectedTest();
+		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmRunSelectedTest.setEnabled(enabled);
 		mntmRunSelectedTest2.setEnabled(enabled);
 		tltmRunselectedtest.setEnabled(enabled);
+		pmntmRunSelectedTest.setEnabled(enabled);
+	}
+
+	private void goToNextSelectedTestActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
+			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
+			while (++nodeIndex < allNodes.size()) {
+				if (selectNodeIfTestEnabled(allNodes.get(nodeIndex)))
+					break;
+			}
+		}
+	}
+
+	private void goToPrevSelectedTestActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
+			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
+			while (--nodeIndex >= 0) {
+				if (selectNodeIfTestEnabled(allNodes.get(nodeIndex)))
+					break;
+			}
+		}
+	}
+
+	private void testCasePropertiesActionExecute() {
+		if (testTree.getSelectionCount() > 0) {
+			TreeItem node = testTree.getSelection()[0];
+			Description test = nodeToTest(node);
+			if (test.isTest()) {
+				Menu testCasePropertyPopupMenu = new Menu(shell, SWT.POP_UP);
+				MenuItem ppmntmHeader = new MenuItem(testCasePropertyPopupMenu, SWT.NONE);
+				ppmntmHeader.setText("TestCase Properties");
+				ppmntmHeader.setEnabled(false);
+				new MenuItem(testCasePropertyPopupMenu, SWT.SEPARATOR);
+				MenuItem ppmntmPrevious = new MenuItem(testCasePropertyPopupMenu, SWT.NONE);
+				ppmntmPrevious.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						goToPrevSelectedTestActionExecute();
+						testCasePropertiesActionExecute();
+					}
+				});
+				ppmntmPrevious.setText("Previous");
+				MenuItem ppmntmRunSelectedTest = new MenuItem(testCasePropertyPopupMenu, SWT.NONE);
+				ppmntmRunSelectedTest.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						runSelectedTestAltActionExecute();
+					}
+				});
+				ppmntmRunSelectedTest.setText("Run Selected Test");
+				MenuItem ppmntmNext = new MenuItem(testCasePropertyPopupMenu, SWT.NONE);
+				ppmntmNext.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						goToNextSelectedTestActionExecute();
+						testCasePropertiesActionExecute();
+					}
+				});
+				ppmntmNext.setText("Next");
+				new MenuItem(testCasePropertyPopupMenu, SWT.SEPARATOR);
+				for(Annotation annotation: test.getAnnotations()) {
+					MenuItem ppmntmAnnotation = new MenuItem(testCasePropertyPopupMenu, SWT.NONE);
+					ppmntmAnnotation.setText(annotation.toString());
+					ppmntmAnnotation.setEnabled(false);
+				}
+				testCasePropertyPopupMenu.setLocation(shell.getLocation().x + fPopupX, shell.getLocation().y + fPopupY);
+				testCasePropertyPopupMenu.setVisible(true);
+			}
+		}
+	}
+
+	private void runSelectedTestAltActionExecute() {
+		runSelectedTestActionExecute();
+		testCasePropertiesActionExecute();
 	}
 
 	private void resetProgress() {
@@ -1035,7 +1375,7 @@ public class TestRunner implements ITestListener {
 			progressBar.setMaximum(10000);
 		}
 		scoreBar.setMaximum(progressBar.getMaximum());
-		
+
 		item.setText(2, "");
 		item.setText(3, "");
 		item.setText(4, "");
@@ -1043,12 +1383,8 @@ public class TestRunner implements ITestListener {
 		item.setText(6, "");
 		item.setText(7, "");
 
-		Deque<TreeItem> stack = new ArrayDeque<>();
-		stack.addAll(Arrays.asList(testTree.getItems()));
-		while (stack.size() > 0) {
-			TreeItem node = stack.pop();
+		for (TreeItem node: getAllTestTreeItemsOrderly()) {
 			node.setImage(imgNone);
-			stack.addAll(Arrays.asList(node.getItems()));
 		}
 		updateTestTreeState(); // XXX there is no need any test condition is not changed
 	}
@@ -1085,6 +1421,7 @@ public class TestRunner implements ITestListener {
 		} else {
 			enableUI(false);
 		}
+		testTreeChange();
 		runActionUpdate();
 	}
 
@@ -1161,6 +1498,8 @@ public class TestRunner implements ITestListener {
 			errorMessageStyledText.insert(stack);
 			end = errorMessageStyledText.getText().length();
 		}
+
+		errorMessageStyledText.setSelection(0);
 	}
 
 	protected void clearFailureMessage() {
@@ -1217,6 +1556,7 @@ public class TestRunner implements ITestListener {
 			"java.lang.reflect.Method.invoke",
 			"sun.reflect.",
 	};
+	private MenuItem mntmTestCaseProperties;
 
 	private boolean filterLine(String line) {
 		for (String pattern: STACK_FILTER_PATTERNS)
@@ -1259,7 +1599,7 @@ public class TestRunner implements ITestListener {
 				item.setText(2, Integer.toString(testNumber));
 				item.setText(3, Integer.toString(fTestResult.getFailureCount()));
 				item.setText(4, Integer.toString(fAssumptionFailureCount));
-				item.setText(5, Integer.toString(fTestResult.getIgnoreCount())); // XXX (Overrides)
+				item.setText(5, Integer.toString(fTestResult.getIgnoreCount()));
 				item.setText(6, formatElapsedTime(fTestResult.getRunTime()));
 				item.setText(7, formatElapsedTime(Math.max(fTestResult.getRunTime(), fTotalTime)));
 
@@ -1284,10 +1624,10 @@ public class TestRunner implements ITestListener {
 				for (int i = 2; i <= 7; ++i)
 					item.setText(i, "");
 			} else {
-				item.setText(6, formatElapsedTime(getElapsedTestTime(getSelectedTest())));
-				item.setText(7, formatElapsedTime(Math.max(getElapsedTestTime(getSelectedTest()), fTotalTime)));
+				item.setText(6, formatElapsedTime(getElapsedTestTime(selectedTest())));
+				item.setText(7, formatElapsedTime(Math.max(getElapsedTestTime(selectedTest()), fTotalTime)));
 			}
-		
+
 			resetProgress();
 		}
 
@@ -1332,10 +1672,10 @@ public class TestRunner implements ITestListener {
 
 
 	protected void updateNodeImage(TreeItem node) {
-		if (node.getChecked() && node.getParentItem() != null && 
+		if (node.getChecked() && node.getParentItem() != null &&
 				(!node.getParentItem().getChecked() || node.getParentItem().getGrayed())) {
 			node.setGrayed(true);
-		} else { 
+		} else {
 			node.setGrayed(false);
 		}
 	}
@@ -1378,7 +1718,7 @@ public class TestRunner implements ITestListener {
 			testTree.update();
 		}
 	}
-			
+
 	protected void updateTestTreeState() {
 		if (testTree.getItemCount() > 0) {
 			testTree.setRedraw(false);
@@ -1405,7 +1745,7 @@ public class TestRunner implements ITestListener {
 			}
 			if (image == imgRunning)
 				node = null;
-			else 
+			else
 				node = node.getParentItem();
 		}
 	}
@@ -1427,6 +1767,25 @@ public class TestRunner implements ITestListener {
 
 	protected TreeItem testToNode(Description test) {
 		return testToNodeMap.get(test);
+	}
+
+	protected Description selectedTest() {
+		if (testTree.getSelectionCount() == 0)
+			return null;
+		else
+			return nodeToTest(testTree.getSelection()[0]);
+	}
+
+	protected void listSelectedTests() {
+		fSelectedTests = new ArrayList<>();
+
+		TreeItem aNode = testTree.getSelectionCount() > 0 ? testTree.getSelection()[0] : null;
+
+		while (aNode != null) {
+			Description aTest = nodeToTest(aNode);
+			fSelectedTests.add(aTest);
+			aNode = aNode.getParentItem();
+		}
 	}
 
 	protected static interface ITestFunc {
@@ -1473,16 +1832,23 @@ public class TestRunner implements ITestListener {
 	protected void enableUI(boolean enable) {
 		mntmSelectAll.setEnabled(enable);
 		tltmSelectAll.setEnabled(enable);
+		pmntmSelectAll.setEnabled(enable);
 		mntmDeselectAll.setEnabled(enable);
 		tltmDeselectAll.setEnabled(enable);
+		pmntmDeselectAll.setEnabled(enable);
 		mntmSelectFailed.setEnabled(enable);
 		tltmSelectFailed.setEnabled(enable);
+		pmntmSelectFailed.setEnabled(enable);
 		mntmSelectCurrent.setEnabled(enable);
 		tltmSelectCurrent.setEnabled(enable);
+		pmntmSelectCurrent.setEnabled(enable);
 		mntmDeselectCurrent.setEnabled(enable);
 		tltmDeselectCurrent.setEnabled(enable);
+		pmntmDeselectCurrent.setEnabled(enable);
 		mntmHideTestNodes.setEnabled(enable);
+		pmntmHideTestNodes.setEnabled(enable);
 		mntmExpandAll.setEnabled(enable);
+		pmntmExpandAll.setEnabled(enable);
 	}
 
 	protected void runTheTest() {
@@ -1490,7 +1856,7 @@ public class TestRunner implements ITestListener {
 			return;
 		if (fRunning) {
 			// warning: we're reentering this method if fRunning is true
-			assert fTestResult != null && fNotifier !=  null;
+			assert fTestResult != null && fNotifier != null;
 			fNotifier.pleaseStop();
 			return;
 		}
@@ -1503,6 +1869,7 @@ public class TestRunner implements ITestListener {
 			tltmStop.setEnabled(true);
 
 			mntmCopyErrorMessageToClipboard.setEnabled(false);
+			pmntmCopyErrorMessageToClipboard.setEnabled(false);
 
 			enableUI(false);
 			autoSaveConfiguration();
@@ -1557,7 +1924,6 @@ public class TestRunner implements ITestListener {
 		}
 		if (testTree.getItemCount() > 0)
 			testTree.setSelection(testTree.getItem(0));
-		testTreeChange();
 	}
 
 	protected String iniFileName() {
@@ -1565,26 +1931,11 @@ public class TestRunner implements ITestListener {
 	}
 
 	protected ICustomIniFile getIniFile(String fileName) {
-		if (mntmUseRegistry.getSelection()) {
-			// TODO: tRegistryIniFile.Create( GetDUnitRegistryKey + FileName )
-			return null;
-		} else
+		if (mntmUseRegistry.getSelection())
+			return new TRegistryIniFile(fileName);
+		else
 			return new TIniFile(fileName);
 	}
-
-	protected void writeToIniFile(String fileName, Properties props) {
-		if (mntmUseRegistry.getSelection()) {
-			// TODO: ...
-		} else {
-			try (OutputStream os = new FileOutputStream(fileName)) {
-				props.store(os, null);
-			} catch (IOException e) {
-				// XXX do nothing
-				e.printStackTrace();
-			}
-		}
-	}
-
 
 	private void loadRegistryAction() {
 		try (ICustomIniFile ini = new TIniFile(iniFileName())) {
@@ -1629,7 +1980,7 @@ public class TestRunner implements ITestListener {
 
 			ini.writeBool(CN_CONFIG_INI_SECTION, "Maximized", shell.getMaximized());
 		}
-		
+
 	}
 
 
@@ -1663,7 +2014,7 @@ public class TestRunner implements ITestListener {
 			ini.writeBool(CN_CONFIG_INI_SECTION, "FailOnMemoryLeaked", mntmFailTestCaseIfMemoryLeaked.getSelection());
 			ini.writeBool(CN_CONFIG_INI_SECTION, "IgnoreSetUpTearDownLeaks", mntmIgnoreMemoryLeakInSetUpTearDown.getSelection());
 			ini.writeBool(CN_CONFIG_INI_SECTION, "ReportMemoryLeakTypes", mntmReportMemoryLeakTypeOnShutdown.getSelection());
-			ini.writeBool(CN_CONFIG_INI_SECTION, "SelectTestedNode", mntmShowTestedNode.getSelection()); 
+			ini.writeBool(CN_CONFIG_INI_SECTION, "SelectTestedNode", mntmShowTestedNode.getSelection());
 			ini.writeBool(CN_CONFIG_INI_SECTION, "WarnOnFailTestOverride", mntmWarnIfFailTestOverridden.getSelection());
 			ini.writeInteger(CN_CONFIG_INI_SECTION, "PopupX", fPopupX);
 			ini.writeInteger(CN_CONFIG_INI_SECTION, "PopupY", fPopupY);
@@ -1684,25 +2035,20 @@ public class TestRunner implements ITestListener {
 				weights[i] = ini.readInteger(CN_CONFIG_INI_SECTION, "sashForm.weights[" + i + "]", weights[i]);
 			}
 			sashForm.setWeights(weights);
-	
+
 			// error box
 			mntmErrorBoxVisible.setSelection(ini.readBool(CN_CONFIG_INI_SECTION, "ErrorMessage.Visible",
 					mntmErrorBoxVisible.getSelection()));
-	
+
 			compositeErrorBox.setVisible(mntmErrorBoxVisible.getSelection());
-			// XXX fix SWT problem
-			if (!mntmErrorBoxVisible.getSelection()) {
-				Point size = shell.getSize();
-				shell.setSize(size.x + 1, size.y);
-				shell.setSize(size);
-			}
+			shell.layout(true, true);
 
 			// failure list configuration
 			for (int i = 0; i < tableFailureList.getColumnCount(); ++i) {
 				TableColumn column = tableFailureList.getColumn(i);
 				column.setWidth(ini.readInteger(CN_CONFIG_INI_SECTION, "FailureList.ColumnWidth[" + i + "]", column.getWidth()));
 			}
-	
+
 			// other options
 			mntmHideTestNodesOnOpen.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
 					"HideTestNodesOnOpen", mntmHideTestNodesOnOpen.getSelection()));
@@ -1758,7 +2104,7 @@ public class TestRunner implements ITestListener {
 			loadSuiteConfiguration(ini, section + "." + getShortDisplayName(test), childNode);
 		}
 	}
-	
+
 	protected void loadSuiteConfiguration() {
 		if (fSuite == null)
 			return;
@@ -1808,6 +2154,17 @@ public class TestRunner implements ITestListener {
 		// do nothing: testToNodeMap already filled in fillTestTree()
 	}
 
+
+	private boolean selectNodeIfTestEnabled(TreeItem node) {
+		Description test = nodeToTest(node);
+		if (node.getChecked() && test.isTest()) {
+			selectNode(node);
+			return true;
+		} else
+			return false;
+	}
+
+
 	private class RunTheTestFilter extends Filter {
 
 		@Override
@@ -1827,7 +2184,7 @@ public class TestRunner implements ITestListener {
 
 	}
 
-	// TODO possible to use @RunListener.ThreadSafe 
+	// TODO possible to use @RunListener.ThreadSafe
 	private class RunTheTestListener extends RunListener {
 
 		boolean lastTestFail = false;
@@ -1843,7 +2200,7 @@ public class TestRunner implements ITestListener {
 
 		private void stopLastStartedSuite(boolean halfway) {
 			assert !startedSuites.isEmpty();
-			Description endedSuite = nodeToTest(halfway ? startedSuites.peek() : startedSuites.pop());				
+			Description endedSuite = nodeToTest(halfway ? startedSuites.peek() : startedSuites.pop());
 			if (!lastSuiteStoppedHalfway) {
 				endSuite(endedSuite);
 				if (!halfway)
@@ -1904,7 +2261,15 @@ public class TestRunner implements ITestListener {
 		public void testFailure(final Failure failure) throws Exception {
 			if (failure.getDescription().equals(Description.TEST_MECHANISM)) {
 				// may be called on an arbitrary thread.
-				showError(failure.getDescription().getDisplayName() + ": " + failure.getMessage());
+				if (!display.isDisposed()) {
+					display.syncExec(new Runnable() {
+						@Override public void run() {
+							if (!display.isDisposed()) {
+								showError(failure.getDescription().getDisplayName(), failure.getException());
+							}
+						}
+					});
+				}
 				return;
 			}
 			if (failure.getDescription().isSuite()) {
@@ -1932,19 +2297,18 @@ public class TestRunner implements ITestListener {
 
 	}
 
-	private void showError(final String message) {
-		if (!display.isDisposed()) {
-			display.syncExec(new Runnable() {
-				@Override public void run() {
-					if (!display.isDisposed()) {
-						MessageBox messageBox = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
-						messageBox.setText(shell.getText());
-						messageBox.setMessage(message);
-						messageBox.open();
-					}
-				}
-			});
+	private void showError(String message, final Throwable exception) {
+		MessageBox messageBox = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+		messageBox.setText(shell.getText());
+		if (message == null)
+			message = "";
+		if (exception != null) {
+			StringWriter sw = new StringWriter();
+			exception.printStackTrace(new PrintWriter(sw));
+			message += (message.isEmpty() ? "" : "\r\n") + sw.toString();
 		}
+		messageBox.setMessage(message);
+		messageBox.open();
 	}
 
 	@Override
@@ -2039,13 +2403,6 @@ public class TestRunner implements ITestListener {
 		return 0;
 	}
 
-	private Description getSelectedTest() {
-		if (testTree.getSelectionCount() == 0)
-			return null;
-		else
-			return nodeToTest(testTree.getSelection()[0]);
-	}
-
 	private int countEnabledTestCases(TreeItem treeItem) {
 		int result = 0;
 		if (treeItem.getChecked()) {
@@ -2057,7 +2414,7 @@ public class TestRunner implements ITestListener {
 		}
 		return result;
 	}
-	
+
 	private int countEnabledTestCases() {
 		int result = 0;
 		for (TreeItem treeItem: testTree.getItems()) {
@@ -2089,5 +2446,4 @@ public class TestRunner implements ITestListener {
 		}
 		return result;
 	}
-
 }

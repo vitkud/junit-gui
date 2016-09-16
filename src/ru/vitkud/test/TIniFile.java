@@ -22,8 +22,7 @@ public class TIniFile implements ICustomIniFile {
 		} catch (FileNotFoundException e) {
 			// do nothing 
 		} catch (IOException e) {
-			// XXX do nothing 
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
 		modified = false;
 	}
@@ -62,8 +61,7 @@ public class TIniFile implements ICustomIniFile {
 			try (OutputStream os = new FileOutputStream(fFileName)) {
 				fProperties.store(os, null);
 			} catch (IOException e) {
-				// XXX do nothing
-				e.printStackTrace();
+				throw new RuntimeException(e);
 			}
 		}
 	}

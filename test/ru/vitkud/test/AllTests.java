@@ -16,6 +16,10 @@ import org.junit.runners.Suite;
 	Third.class})
 public class AllTests {
 
+	public static void main(String[] args) throws Exception {
+		System.exit(TestRunner.runTest(AllTests.class));
+	}
+
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
 		System.out.println("AllTests.setUpBeforeClass()");

@@ -10,8 +10,6 @@ apply plugin: 'maven'
 sourceCompatibility = JavaVersion.VERSION_1_7
 targetCompatibility = JavaVersion.VERSION_1_7
 
-defaultTasks 'eclipse'
-
 ext.buildDate = new Date()
 ext.buildNumber = System.env['BUILD_NUMBER']?.toLong() ?: (long) buildDate.time.intdiv(1000).intdiv(60)
 
@@ -30,7 +28,12 @@ repositories {
 
 dependencies {
 	compile 'junit:junit:4.12'
-	compileOnly 'org.eclipse.swt:org.eclipse.swt.win32.win32.x86:4.3'
+	if (currentOperatingSystem.windows)
+		compile "org.eclipse.swt:org.eclipse.swt.win32.win32.x86${is64bit()?'_64':''}:4.3"
+	else if (currentOperatingSystem.linux)
+		compile "org.eclipse.swt:org.eclipse.swt.gtk.linux.x86${is64bit()?'_64':''}:4.3"
+	else if (currentOperatingSystem.macOsX)
+		compile "org.eclipse.swt:org.eclipse.swt.cocoa.macosx.x86${is64bit()?'_64':''}:4.3"
 }
 
 tasks.eclipse.dependsOn(cleanEclipse)
@@ -55,5 +58,17 @@ jar {
 			'Implementation-Version': (version =~ /^(.*?)(?:-SNAPSHOT)?$/)[0][1] +
 				".$buildNumber (${buildDate.format('yyyy-MM-dd')})",
 		)
+	}
+}
+
+static def getCurrentOperatingSystem() {
+	return org.gradle.internal.os.OperatingSystem.current()
+}
+
+static def is64bit() {
+	switch (System.properties['sun.arch.data.model']) {
+		case '64': return true
+		case '32': return false
+		default: return System.getProperty('os.arch').contains('64')
 	}
 }

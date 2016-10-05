@@ -3,7 +3,7 @@ version = '1.0-SNAPSHOT'
 
 apply plugin: 'java'
 apply plugin: 'eclipse'
-apply plugin: 'maven'
+apply plugin: 'idea'
 
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 [compileJava, compileTestJava]*.options*.compilerArgs = ['-Xlint:all,-options,-rawtypes', '-Werror']
@@ -28,11 +28,11 @@ repositories {
 
 dependencies {
 	compile 'junit:junit:4.12'
-	if (currentOperatingSystem.windows)
+	if (currentOS.windows)
 		compile "org.eclipse.swt:org.eclipse.swt.win32.win32.x86${is64bit()?'_64':''}:4.3"
-	else if (currentOperatingSystem.linux)
+	else if (currentOS.linux)
 		compile "org.eclipse.swt:org.eclipse.swt.gtk.linux.x86${is64bit()?'_64':''}:4.3"
-	else if (currentOperatingSystem.macOsX)
+	else if (currentOS.macOsX)
 		compile "org.eclipse.swt:org.eclipse.swt.cocoa.macosx.x86${is64bit()?'_64':''}:4.3"
 }
 
@@ -49,26 +49,28 @@ eclipseJdt << {
 	)
 }
 
+idea {
+	project {
+		languageLevel = sourceCompatibility
+		jdkName = targetCompatibility
+	}
+}
+
 jar {
 	manifest {
 		attributes (
 			'Specification-Title': project.name,
-			'Specification-Version': (version =~ /^(.*?)(?:-SNAPSHOT)?$/)[0][1],
+			'Specification-Version': version,
 			'Implementation-Title': project.name,
-			'Implementation-Version': (version =~ /^(.*?)(?:-SNAPSHOT)?$/)[0][1] +
-				".$buildNumber (${buildDate.format('yyyy-MM-dd')})",
+			'Implementation-Version': "$version (${buildDate.format('yyyy-MM-dd')}) build $buildNumber",
 		)
 	}
 }
 
-static def getCurrentOperatingSystem() {
+static def getCurrentOS() {
 	return org.gradle.internal.os.OperatingSystem.current()
 }
 
 static def is64bit() {
-	switch (System.properties['sun.arch.data.model']) {
-		case '64': return true
-		case '32': return false
-		default: return System.getProperty('os.arch').contains('64')
-	}
+	return System.getProperty('os.arch').contains('64')
 }

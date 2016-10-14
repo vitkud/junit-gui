@@ -1,6 +1,5 @@
 package ru.vitkud.test;
 
-import org.eclipse.swt.widgets.Display;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assume;
@@ -60,7 +59,13 @@ public class Second {
 	}
 
 	private static void processMessages() {
-		while (Display.getDefault().readAndDispatch());
+		try {
+			Class<?> displayClass = Class.forName("org.eclipse.swt.widgets.Display");
+			Object defaultDisplay = displayClass.getMethod("getDefault").invoke(null);
+			while ((boolean) displayClass.getMethod("readAndDispatch").invoke(defaultDisplay));
+		} catch (Exception e) {
+			// do nothing
+		}
 	}
 
 }

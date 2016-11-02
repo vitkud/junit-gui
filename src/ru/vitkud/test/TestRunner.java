@@ -202,6 +202,7 @@ public class TestRunner implements ITestListener {
 	 */
 	protected void createContents() {
 		shell = new Shell();
+		shell.setImage(SWTResourceManager.getImage(TestRunner.class, "/ru/vitkud/test/images/main.ico"));
 		shell.addShellListener(new ShellAdapter() {
 			@Override
 			public void shellActivated(ShellEvent e) {

@@ -197,45 +197,6 @@ public class TestRunner implements ITestListener {
 			while (display.readAndDispatch());
 	}
 
-	private void formCreate() {
-		fTests = new ArrayList<>();
-		testToNodeMap = new HashMap<>();
-		fTestTimeMap = new HashMap<Description, TestTime>();
-		loadConfiguration();
-
-		setUpStateImages();
-		setupCustomShortcuts();
-		testTree.removeAll(); // XXX unnecessary action
-		enableUI(false);
-		clearFailureMessage();
-		setup();
-
-		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
-		mntmReportMemoryLeakTypeOnShutdown.setSelection(false);
-		mntmReportMemoryLeakTypeOnShutdown.setEnabled(false);
-
-		if (!mntmFailTestCaseIfMemoryLeaked.isEnabled())
-			mntmFailTestCaseIfMemoryLeaked.setSelection(false);
-		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(mntmFailTestCaseIfMemoryLeaked.getSelection());
-		if (!mntmIgnoreMemoryLeakInSetUpTearDown.getEnabled())
-			mntmIgnoreMemoryLeakInSetUpTearDown.setSelection(false);
-
-		runActionUpdate();
-		copyMessageToClipboardActionUpdate();
-		stopActionUpdate();
-	}
-
-	private void formDestroy() {
-		clearResult();
-		autoSaveConfiguration();
-		fSuite = null;
-		fTests = null;
-	}
-
-	private void formShow() {
-		setupGuiNodes();
-	}
-
 	/**
 	 * Create contents of the window.
 	 */
@@ -1062,6 +1023,45 @@ public class TestRunner implements ITestListener {
 		sashForm.setWeights(new int[] {200, 150, 50});
 	}
 
+	void formCreate() {
+		fTests = new ArrayList<>();
+		testToNodeMap = new HashMap<>();
+		fTestTimeMap = new HashMap<Description, TestTime>();
+		loadConfiguration();
+
+		setUpStateImages();
+		setupCustomShortcuts();
+		testTree.removeAll(); // XXX unnecessary action
+		enableUI(false);
+		clearFailureMessage();
+		setup();
+
+		mntmFailTestCaseIfMemoryLeaked.setEnabled(false);
+		mntmReportMemoryLeakTypeOnShutdown.setSelection(false);
+		mntmReportMemoryLeakTypeOnShutdown.setEnabled(false);
+
+		if (!mntmFailTestCaseIfMemoryLeaked.isEnabled())
+			mntmFailTestCaseIfMemoryLeaked.setSelection(false);
+		mntmIgnoreMemoryLeakInSetUpTearDown.setEnabled(mntmFailTestCaseIfMemoryLeaked.getSelection());
+		if (!mntmIgnoreMemoryLeakInSetUpTearDown.getEnabled())
+			mntmIgnoreMemoryLeakInSetUpTearDown.setSelection(false);
+
+		runActionUpdate();
+		copyMessageToClipboardActionUpdate();
+		stopActionUpdate();
+	}
+
+	void formDestroy() {
+		clearResult();
+		autoSaveConfiguration();
+		fSuite = null;
+		fTests = null;
+	}
+
+	void formShow() {
+		setupGuiNodes();
+	}
+
 	void selectAllActionExecute() {
 		for (TreeItem rootNode: testTree.getItems())
 			applyToTests(rootNode, new EnableTest());
@@ -1156,7 +1156,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void runActionExecute() {
+	void runActionExecute() {
 		if (fSuite == null)
 			return;
 
@@ -1164,35 +1164,35 @@ public class TestRunner implements ITestListener {
 		runTheTest();
 	}
 
-	private void runActionUpdate() {
+	void runActionUpdate() {
 		boolean enabled = !fRunning && fSuite!= null && countEnabledTestCases() > 0;
 		mntmRun.setEnabled(enabled);
 		tltmRun.setEnabled(enabled);
 	}
 
-	private void copyMessageToClipboardActionExecute() {
+	void copyMessageToClipboardActionExecute() {
 		errorMessageStyledText.selectAll();
 		errorMessageStyledText.copy();
 	}
 
-	private void copyMessageToClipboardActionUpdate() {
+	void copyMessageToClipboardActionUpdate() {
 		boolean enabled = tableFailureList.getSelectionIndex() != -1;
 		mntmCopyErrorMessageToClipboard.setEnabled(enabled);
 		pmntmCopyErrorMessageToClipboard.setEnabled(enabled);
 	}
 
-	private void stopActionExecute() {
+	void stopActionExecute() {
 		if (fTestResult != null && fNotifier != null)
 			fNotifier.pleaseStop();
 	}
 
-	private void stopActionUpdate() {
+	void stopActionUpdate() {
 		boolean enabled = fRunning && fTestResult != null && fNotifier != null;
 		mntmStop.setEnabled(enabled);
 		tltmStop.setEnabled(enabled);
 	}
 
-	private void testTreeChange() {
+	void testTreeChange() {
 		if (testTree.getSelectionCount() > 0) {
 			TreeItem node = testTree.getSelection()[0];
 			tableFailureList.deselectAll();
@@ -1211,7 +1211,7 @@ public class TestRunner implements ITestListener {
 		runSelectedTestActionUpdate();
 	}
 
-	private void copyTestnameToClipboardActionExecute() {
+	void copyTestnameToClipboardActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			Clipboard clipboard = new Clipboard(Display.getCurrent());
 			clipboard.setContents(new Object[] { testTree.getSelection()[0].getText() },
@@ -1220,14 +1220,14 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void copyTestnameToClipboardActionUpdate() {
+	void copyTestnameToClipboardActionUpdate() {
 		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmCopyTestnameToClipboard.setEnabled(enabled);
 		pmntmCopyTestnameToClipboard.setEnabled(enabled);
 	}
 
-	private void runSelectedTestActionExecute() {
+	void runSelectedTestActionExecute() {
 		setup();
 		listSelectedTests();
 		progressBar.setMaximum(1);
@@ -1236,7 +1236,7 @@ public class TestRunner implements ITestListener {
 		fSelectedTests = null;
 	}
 
-	private void runSelectedTestActionUpdate() {
+	void runSelectedTestActionUpdate() {
 		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmRunSelectedTest.setEnabled(enabled);
@@ -1245,7 +1245,7 @@ public class TestRunner implements ITestListener {
 		pmntmRunSelectedTest.setEnabled(enabled);
 	}
 
-	private void goToNextSelectedTestActionExecute() {
+	void goToNextSelectedTestActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
 			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
@@ -1256,7 +1256,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void goToPrevSelectedTestActionExecute() {
+	void goToPrevSelectedTestActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
 			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
@@ -1267,7 +1267,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void testCasePropertiesActionExecute() {
+	void testCasePropertiesActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			TreeItem node = testTree.getSelection()[0];
 			Description test = nodeToTest(node);
@@ -1315,12 +1315,12 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void runSelectedTestAltActionExecute() {
+	void runSelectedTestAltActionExecute() {
 		runSelectedTestActionExecute();
 		testCasePropertiesActionExecute();
 	}
 
-	private void resetProgress() {
+	void resetProgress() {
 		scoreBar.setBackground(null);
 		scoreBar.update();
 		scoreBar.setSelection(0);
@@ -1352,7 +1352,7 @@ public class TestRunner implements ITestListener {
 	protected int fAssumptionFailureCount;
 	protected boolean fRunning;
 	protected ArrayList<Description> fTests;
-	private Map<Description, TreeItem> testToNodeMap;
+	protected Map<Description, TreeItem> testToNodeMap;
 	protected List<Description> fSelectedTests;
 	protected long fTotalTime;
 	protected Map<Description, TestTime> fTestTimeMap;
@@ -1412,7 +1412,7 @@ public class TestRunner implements ITestListener {
 		clError = display.getSystemColor(SWT.COLOR_RED);
 	}
 
-	public void setSuite(Class<?> value) {
+	protected void setSuite(Class<?> value) {
 		fSuite = value;
 		if (fSuite != null) {
 			//loadSuiteConfiguration(); // moved into initTree()
@@ -1434,7 +1434,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void displayFailureMessage(TableItem item) {
+	protected void displayFailureMessage(TableItem item) {
 		Color hlColor = clFailure;
 		if (indexesImages.get(item.getImage()).intValue() >= indexesImages.get(imgError).intValue())
 			hlColor = clError;
@@ -1937,14 +1937,14 @@ public class TestRunner implements ITestListener {
 			return new TIniFile(fileName);
 	}
 
-	private void loadRegistryAction() {
+	protected void loadRegistryAction() {
 		try (ICustomIniFile ini = new TIniFile(iniFileName())) {
 			mntmUseRegistry.setSelection(ini.readBool(CN_CONFIG_INI_SECTION,
 					"UseRegistry", mntmUseRegistry.getSelection()));
 		}
 	}
 
-	private void saveRegistryAction() {
+	protected void saveRegistryAction() {
 		if (mntmUseRegistry.getSelection())
 			new File(iniFileName()).delete();
 
@@ -1954,7 +1954,7 @@ public class TestRunner implements ITestListener {
 	}
 
 
-	private void loadFormPlacement() {
+	protected void loadFormPlacement() {
 		try (ICustomIniFile ini = getIniFile(iniFileName())) {
 			shell.setBounds(
 					ini.readInteger(CN_CONFIG_INI_SECTION, "Left", shell.getLocation().x),
@@ -1967,7 +1967,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	private void saveFormPlacement() {
+	protected void saveFormPlacement() {
 		try (ICustomIniFile ini = getIniFile(iniFileName())) {
 			ini.writeBool(CN_CONFIG_INI_SECTION, "AutoSave", mntmAutoSave.getSelection());
 

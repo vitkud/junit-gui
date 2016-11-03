@@ -207,6 +207,7 @@ public class TestRunner implements ITestListener {
 			@Override
 			public void shellActivated(ShellEvent e) {
 				formShow();
+				shell.removeShellListener(this);
 			}
 		});
 		shell.addDisposeListener(new DisposeListener() {
@@ -1024,7 +1025,7 @@ public class TestRunner implements ITestListener {
 		sashForm.setWeights(new int[] {200, 150, 50});
 	}
 
-	void formCreate() {
+	protected void formCreate() {
 		fTests = new ArrayList<>();
 		testToNodeMap = new HashMap<>();
 		fTestTimeMap = new HashMap<Description, TestTime>();
@@ -1052,32 +1053,32 @@ public class TestRunner implements ITestListener {
 		stopActionUpdate();
 	}
 
-	void formDestroy() {
+	protected void formDestroy() {
 		clearResult();
 		autoSaveConfiguration();
 		fSuite = null;
 		fTests = null;
 	}
 
-	void formShow() {
+	protected void formShow() {
 		setupGuiNodes();
 	}
 
-	void selectAllActionExecute() {
+	protected void selectAllActionExecute() {
 		for (TreeItem rootNode: testTree.getItems())
 			applyToTests(rootNode, new EnableTest());
 		updateStatus(true);
 		runActionUpdate();
 	}
 
-	void deselectAllActionExecute() {
+	protected void deselectAllActionExecute() {
 		for (TreeItem rootNode: testTree.getItems())
 			applyToTests(rootNode, new DisableTest());
 		updateStatus(true);
 		runActionUpdate();
 	}
 
-	void selectFailedActionExecute() {
+	protected void selectFailedActionExecute() {
 		// deselect all
 		for (TreeItem rootNode: testTree.getItems())
 			applyToTests(rootNode, new DisableTest());
@@ -1091,7 +1092,7 @@ public class TestRunner implements ITestListener {
 		runActionUpdate();
 	}
 
-	void selectCurrentActionExecute() {
+	protected void selectCurrentActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			applyToTests(testTree.getSelection()[0], new EnableTest());
 			setNodeState(testTree.getSelection()[0], true);
@@ -1100,7 +1101,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void deselectCurrentActionExecute() {
+	protected void deselectCurrentActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			applyToTests(testTree.getSelection()[0], new DisableTest());
 			updateStatus(true);
@@ -1131,7 +1132,7 @@ public class TestRunner implements ITestListener {
 			node.setExpanded(true);
 	}
 
-	void hideTestNodesActionExecute() {
+	protected void hideTestNodesActionExecute() {
 		if (testTree.getItemCount() == 0)
 			return;
 
@@ -1147,7 +1148,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void expandAllNodesActionExecute() {
+	protected void expandAllNodesActionExecute() {
 		fullExpandTestTree();
 		if (testTree.getSelectionCount() > 0)
 			testTree.showSelection();
@@ -1157,7 +1158,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void runActionExecute() {
+	protected void runActionExecute() {
 		if (fSuite == null)
 			return;
 
@@ -1165,35 +1166,35 @@ public class TestRunner implements ITestListener {
 		runTheTest();
 	}
 
-	void runActionUpdate() {
+	protected void runActionUpdate() {
 		boolean enabled = !fRunning && fSuite!= null && countEnabledTestCases() > 0;
 		mntmRun.setEnabled(enabled);
 		tltmRun.setEnabled(enabled);
 	}
 
-	void copyMessageToClipboardActionExecute() {
+	protected void copyMessageToClipboardActionExecute() {
 		errorMessageStyledText.selectAll();
 		errorMessageStyledText.copy();
 	}
 
-	void copyMessageToClipboardActionUpdate() {
+	protected void copyMessageToClipboardActionUpdate() {
 		boolean enabled = tableFailureList.getSelectionIndex() != -1;
 		mntmCopyErrorMessageToClipboard.setEnabled(enabled);
 		pmntmCopyErrorMessageToClipboard.setEnabled(enabled);
 	}
 
-	void stopActionExecute() {
+	protected void stopActionExecute() {
 		if (fTestResult != null && fNotifier != null)
 			fNotifier.pleaseStop();
 	}
 
-	void stopActionUpdate() {
+	protected void stopActionUpdate() {
 		boolean enabled = fRunning && fTestResult != null && fNotifier != null;
 		mntmStop.setEnabled(enabled);
 		tltmStop.setEnabled(enabled);
 	}
 
-	void testTreeChange() {
+	protected void testTreeChange() {
 		if (testTree.getSelectionCount() > 0) {
 			TreeItem node = testTree.getSelection()[0];
 			tableFailureList.deselectAll();
@@ -1212,7 +1213,7 @@ public class TestRunner implements ITestListener {
 		runSelectedTestActionUpdate();
 	}
 
-	void copyTestnameToClipboardActionExecute() {
+	protected void copyTestnameToClipboardActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			Clipboard clipboard = new Clipboard(Display.getCurrent());
 			clipboard.setContents(new Object[] { testTree.getSelection()[0].getText() },
@@ -1221,14 +1222,14 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void copyTestnameToClipboardActionUpdate() {
+	protected void copyTestnameToClipboardActionUpdate() {
 		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmCopyTestnameToClipboard.setEnabled(enabled);
 		pmntmCopyTestnameToClipboard.setEnabled(enabled);
 	}
 
-	void runSelectedTestActionExecute() {
+	protected void runSelectedTestActionExecute() {
 		setup();
 		listSelectedTests();
 		progressBar.setMaximum(1);
@@ -1237,7 +1238,7 @@ public class TestRunner implements ITestListener {
 		fSelectedTests = null;
 	}
 
-	void runSelectedTestActionUpdate() {
+	protected void runSelectedTestActionUpdate() {
 		Description selectedTest = selectedTest();
 		Boolean enabled = selectedTest == null ? false : selectedTest.isTest();
 		mntmRunSelectedTest.setEnabled(enabled);
@@ -1246,7 +1247,7 @@ public class TestRunner implements ITestListener {
 		pmntmRunSelectedTest.setEnabled(enabled);
 	}
 
-	void goToNextSelectedTestActionExecute() {
+	protected void goToNextSelectedTestActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
 			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
@@ -1257,7 +1258,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void goToPrevSelectedTestActionExecute() {
+	protected void goToPrevSelectedTestActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			List<TreeItem> allNodes = getAllTestTreeItemsOrderly();
 			int nodeIndex = allNodes.indexOf(testTree.getSelection()[0]);
@@ -1268,7 +1269,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void testCasePropertiesActionExecute() {
+	protected void testCasePropertiesActionExecute() {
 		if (testTree.getSelectionCount() > 0) {
 			TreeItem node = testTree.getSelection()[0];
 			Description test = nodeToTest(node);
@@ -1316,18 +1317,21 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	void runSelectedTestAltActionExecute() {
+	protected void runSelectedTestAltActionExecute() {
 		runSelectedTestActionExecute();
 		testCasePropertiesActionExecute();
 	}
 
-	void resetProgress() {
+	private void resetProgress() {
 		scoreBar.setBackground(null);
 		scoreBar.update();
 		scoreBar.setSelection(0);
 		progressBar.setSelection(0);
 		lblProgressPercent.setText("");
 	}
+
+	private int fPopupX;
+	private int fPopupY;
 
 	protected static class TestTime {
 		private long startTime;
@@ -1343,9 +1347,6 @@ public class TestRunner implements ITestListener {
 			return (endTime != 0 ? endTime : System.currentTimeMillis()) - startTime;
 		}
 	}
-
-	private int fPopupX;
-	private int fPopupY;
 
 	protected Class<?> fSuite;
 	protected Result fTestResult;

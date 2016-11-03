@@ -93,7 +93,7 @@ public class TestRunner implements ITestListener {
 
 	protected Display display;
 	protected Shell shell;
-	protected ToolBar toolBar;
+	public ToolBar toolBar;
 	protected Tree testTree;
 	protected Table tableResults;
 	protected Table tableFailureList;
@@ -1794,7 +1794,7 @@ public class TestRunner implements ITestListener {
 		boolean exec(TreeItem item);
 	}
 
-	protected static class EnableTest implements ITestFunc {
+	protected class EnableTest implements ITestFunc {
 		@Override
 		public boolean exec(TreeItem item) {
 			item.setChecked(true);
@@ -1802,7 +1802,7 @@ public class TestRunner implements ITestListener {
 		}
 	}
 
-	protected static class DisableTest implements ITestFunc {
+	protected class DisableTest implements ITestFunc {
 		@Override
 		public boolean exec(TreeItem item) {
 			item.setChecked(false);

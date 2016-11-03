@@ -93,7 +93,7 @@ public class TestRunner implements ITestListener {
 
 	protected Display display;
 	protected Shell shell;
-	public ToolBar toolBar;
+	protected ToolBar toolBar;
 	protected Tree testTree;
 	protected Table tableResults;
 	protected Table tableFailureList;
